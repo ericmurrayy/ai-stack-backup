@@ -1,0 +1,44 @@
+-- Murray's FSM - Seed Data (Optional)
+-- =====================================
+-- Run this after creating a user account to populate test data
+-- Replace 'YOUR_USER_ID' with your actual auth.uid()
+
+-- Example: Set your owner_id
+-- DO $$
+-- DECLARE
+--     owner_id UUID := 'YOUR_USER_ID';
+-- BEGIN
+--
+--     -- Insert sample customers
+--     INSERT INTO customers (id, owner_id, name, phone, email, notes) VALUES
+--     ('11111111-1111-1111-1111-111111111111', owner_id, 'John Smith', '+15551234567', 'john@example.com', 'Repeat customer, prefers morning appointments'),
+--     ('22222222-2222-2222-2222-222222222222', owner_id, 'Sarah Johnson', '+15559876543', 'sarah@example.com', 'New homeowner'),
+--     ('33333333-3333-3333-3333-333333333333', owner_id, 'Mike Williams', '+15555555555', 'mike@example.com', 'Commercial property manager');
+--
+--     -- Insert sample locations
+--     INSERT INTO locations (id, owner_id, customer_id, address1, city, state, postal_code, access_notes) VALUES
+--     ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', owner_id, '11111111-1111-1111-1111-111111111111', '123 Main Street', 'Springfield', 'IL', '62701', 'Gate code: 1234'),
+--     ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', owner_id, '22222222-2222-2222-2222-222222222222', '456 Oak Avenue', 'Springfield', 'IL', '62702', 'Driveway on left side'),
+--     ('cccccccc-cccc-cccc-cccc-cccccccccccc', owner_id, '33333333-3333-3333-3333-333333333333', '789 Industrial Blvd', 'Springfield', 'IL', '62703', 'Loading dock B');
+--
+--     -- Insert sample jobs
+--     INSERT INTO jobs (id, owner_id, customer_id, location_id, title, service_type, problem_description, status, scheduled_start, scheduled_end) VALUES
+--     ('dddddddd-dddd-dddd-dddd-dddddddddddd', owner_id, '11111111-1111-1111-1111-111111111111', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Spring Replacement', 'repair', 'Broken torsion spring, door won''t open', 'scheduled', NOW() + INTERVAL '1 day', NOW() + INTERVAL '1 day' + INTERVAL '2 hours'),
+--     ('eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee', owner_id, '22222222-2222-2222-2222-222222222222', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'New Opener Install', 'installation', 'Customer wants smart garage door opener', 'scheduled', NOW() + INTERVAL '2 days', NOW() + INTERVAL '2 days' + INTERVAL '3 hours'),
+--     ('ffffffff-ffff-ffff-ffff-ffffffffffff', owner_id, '33333333-3333-3333-3333-333333333333', 'cccccccc-cccc-cccc-cccc-cccccccccccc', 'Commercial Door Maintenance', 'maintenance', 'Annual maintenance for 3 commercial overhead doors', 'scheduled', NOW() + INTERVAL '3 days', NOW() + INTERVAL '3 days' + INTERVAL '4 hours');
+--
+--     -- Insert sample line items (estimates)
+--     INSERT INTO line_items (owner_id, job_id, kind, name, description, qty, unit_price_cents, sort_order) VALUES
+--     (owner_id, 'dddddddd-dddd-dddd-dddd-dddddddddddd', 'estimate', 'Torsion Spring', 'Heavy duty torsion spring', 1, 18500, 1),
+--     (owner_id, 'dddddddd-dddd-dddd-dddd-dddddddddddd', 'estimate', 'Labor', 'Spring replacement labor', 1, 15000, 2),
+--     (owner_id, 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee', 'estimate', 'Smart Opener', 'Chamberlain WiFi Smart Opener', 1, 35000, 1),
+--     (owner_id, 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee', 'estimate', 'Labor', 'Installation labor', 1, 20000, 2),
+--     (owner_id, 'ffffffff-ffff-ffff-ffff-ffffffffffff', 'estimate', 'Maintenance Service', 'Commercial door maintenance per door', 3, 12500, 1);
+--
+-- END $$;
+
+-- To run this seed file:
+-- 1. Create your user account in Supabase Auth
+-- 2. Copy your user ID from auth.users
+-- 3. Uncomment the block above and replace 'YOUR_USER_ID'
+-- 4. Run: supabase db execute -f supabase/seed.sql

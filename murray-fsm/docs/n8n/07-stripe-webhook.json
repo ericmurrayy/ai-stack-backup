@@ -1,0 +1,102 @@
+{
+  "name": "07 - Stripe Webhook",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "stripe-webhook",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Stripe Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "stripe-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Verify Stripe webhook signature\nconst crypto = require('crypto');\n\nconst signature = $input.first().headers['stripe-signature'];\nconst payload = JSON.stringify($input.first().body);\nconst secret = $env.STRIPE_WEBHOOK_SECRET;\n\nif (!signature || !secret) {\n  throw new Error('Missing signature or secret');\n}\n\n// Parse signature\nconst elements = signature.split(',');\nconst signatureMap = {};\nfor (const element of elements) {\n  const [key, value] = element.split('=');\n  signatureMap[key] = value;\n}\n\nconst timestamp = signatureMap['t'];\nconst signatures = signatureMap['v1'];\n\n// Check timestamp (5 minute tolerance)\nconst timestampSec = parseInt(timestamp);\nconst now = Math.floor(Date.now() / 1000);\nif (Math.abs(now - timestampSec) > 300) {\n  throw new Error('Timestamp too old');\n}\n\n// Verify signature\nconst signedPayload = `${timestamp}.${payload}`;\nconst expectedSignature = crypto\n  .createHmac('sha256', secret)\n  .update(signedPayload)\n  .digest('hex');\n\nif (signatures !== expectedSignature) {\n  throw new Error('Signature mismatch');\n}\n\nreturn [{\n  json: {\n    verified: true,\n    event: $input.first().body\n  }\n}];"
+      },
+      "id": "verify-signature",
+      "name": "Verify Stripe Signature",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {"caseSensitive": true},
+          "conditions": [
+            {
+              "leftValue": "={{ $json.event.type }}",
+              "rightValue": "payment_intent.succeeded",
+              "operator": {"type": "string", "operation": "equals"}
+            }
+          ]
+        }
+      },
+      "id": "is-payment-success",
+      "name": "Is Payment Success?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": "public",
+        "table": "payments",
+        "filterType": "string",
+        "filterString": "stripe_payment_intent_id=eq.{{ $json.event.data.object.id }}",
+        "columns": "status",
+        "updateFields": {
+          "status": "succeeded"
+        }
+      },
+      "id": "update-payment",
+      "name": "Update Payment Status",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [900, 200],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-creds",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { received: true } }}"
+      },
+      "id": "respond-success",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1120, 300]
+    }
+  ],
+  "connections": {
+    "Stripe Webhook": {
+      "main": [[{"node": "Verify Stripe Signature", "type": "main", "index": 0}]]
+    },
+    "Verify Stripe Signature": {
+      "main": [[{"node": "Is Payment Success?", "type": "main", "index": 0}]]
+    },
+    "Is Payment Success?": {
+      "main": [
+        [{"node": "Update Payment Status", "type": "main", "index": 0}],
+        [{"node": "Respond Success", "type": "main", "index": 0}]
+      ]
+    },
+    "Update Payment Status": {
+      "main": [[{"node": "Respond Success", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {"executionOrder": "v1"},
+  "tags": [{"name": "Murray FSM"}]
+}

@@ -1,0 +1,190 @@
+{
+  "name": "08 - Calendar Sync",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "calendar-sync",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Calendar Sync Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "calendar-sync"
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "schema": "public",
+        "table": "jobs",
+        "filterType": "string",
+        "filterString": "id=eq.{{ $json.job_id }}",
+        "options": {
+          "select": "*, customer:customers(*), location:locations(*)"
+        }
+      },
+      "id": "fetch-job",
+      "name": "Fetch Job",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [460, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-creds",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "schema": "public",
+        "table": "calendar_events",
+        "filterType": "string",
+        "filterString": "job_id=eq.{{ $json.id }}"
+      },
+      "id": "check-existing",
+      "name": "Check Existing Events",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [680, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-creds",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const job = $('Fetch Job').first().json;\nconst existingEvents = $input.all();\nconst customer = job.customer;\nconst location = job.location;\n\nconst summary = `${job.title} - ${customer?.name || 'Customer'}`;\nconst description = [\n  `Customer: ${customer?.name || 'N/A'}`,\n  `Phone: ${customer?.phone || 'N/A'}`,\n  `Address: ${location ? `${location.address1}, ${location.city}, ${location.state}` : 'N/A'}`,\n  `Service: ${job.service_type || 'N/A'}`,\n  `Notes: ${job.problem_description || 'None'}`\n].join('\\n');\n\nconst eventLocation = location \n  ? `${location.address1}, ${location.city}, ${location.state} ${location.postal_code}` \n  : '';\n\nconst googleEvent = existingEvents.find(e => e.json.provider === 'google');\n\nreturn [{\n  json: {\n    job_id: job.id,\n    owner_id: job.owner_id,\n    summary: summary,\n    description: description,\n    location: eventLocation,\n    start: job.scheduled_start,\n    end: job.scheduled_end,\n    existing_google_event_id: googleEvent?.json.external_event_id || null\n  }\n}];"
+      },
+      "id": "prepare-event",
+      "name": "Prepare Event Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {"caseSensitive": true},
+          "conditions": [
+            {
+              "leftValue": "={{ $json.existing_google_event_id }}",
+              "rightValue": "",
+              "operator": {"type": "string", "operation": "notEquals"}
+            }
+          ]
+        }
+      },
+      "id": "has-existing",
+      "name": "Has Existing Event?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "resource": "event",
+        "operation": "update",
+        "calendar": "={{ $env.GOOGLE_CALENDAR_ID }}",
+        "eventId": "={{ $json.existing_google_event_id }}",
+        "updateFields": {
+          "summary": "={{ $json.summary }}",
+          "description": "={{ $json.description }}",
+          "location": "={{ $json.location }}",
+          "start": "={{ $json.start }}",
+          "end": "={{ $json.end }}"
+        }
+      },
+      "id": "update-google-event",
+      "name": "Update Google Event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.1,
+      "position": [1340, 200],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "google-calendar-creds",
+          "name": "Google Calendar"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "event",
+        "calendar": "={{ $env.GOOGLE_CALENDAR_ID }}",
+        "start": "={{ $json.start }}",
+        "end": "={{ $json.end }}",
+        "additionalFields": {
+          "summary": "={{ $json.summary }}",
+          "description": "={{ $json.description }}",
+          "location": "={{ $json.location }}"
+        }
+      },
+      "id": "create-google-event",
+      "name": "Create Google Event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.1,
+      "position": [1340, 400],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "google-calendar-creds",
+          "name": "Google Calendar"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "schema": "public",
+        "table": "calendar_events",
+        "columns": "owner_id,job_id,provider,external_event_id,calendar_id,status,last_synced_at",
+        "conflictColumns": "job_id,provider",
+        "options": {}
+      },
+      "id": "upsert-calendar-event",
+      "name": "Upsert Calendar Event",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1560, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-creds",
+          "name": "Supabase"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Calendar Sync Trigger": {
+      "main": [[{"node": "Fetch Job", "type": "main", "index": 0}]]
+    },
+    "Fetch Job": {
+      "main": [[{"node": "Check Existing Events", "type": "main", "index": 0}]]
+    },
+    "Check Existing Events": {
+      "main": [[{"node": "Prepare Event Data", "type": "main", "index": 0}]]
+    },
+    "Prepare Event Data": {
+      "main": [[{"node": "Has Existing Event?", "type": "main", "index": 0}]]
+    },
+    "Has Existing Event?": {
+      "main": [
+        [{"node": "Update Google Event", "type": "main", "index": 0}],
+        [{"node": "Create Google Event", "type": "main", "index": 0}]
+      ]
+    },
+    "Update Google Event": {
+      "main": [[{"node": "Upsert Calendar Event", "type": "main", "index": 0}]]
+    },
+    "Create Google Event": {
+      "main": [[{"node": "Upsert Calendar Event", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {"executionOrder": "v1"},
+  "tags": [{"name": "Murray FSM"}]
+}

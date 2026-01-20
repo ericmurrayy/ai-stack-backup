@@ -1,0 +1,86 @@
+{
+  "name": "04 - Day Before Reminder",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{"field": "hours", "hour": 9}]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Daily 9 AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "schema": "public",
+        "table": "jobs",
+        "filterType": "string",
+        "filterString": "status=eq.scheduled&scheduled_start=gte.{{ $now.plus({days: 1}).startOf('day').toISO() }}&scheduled_start=lt.{{ $now.plus({days: 2}).startOf('day').toISO() }}",
+        "options": {
+          "select": "*, customer:customers(*), location:locations(*)"
+        }
+      },
+      "id": "fetch-tomorrow-jobs",
+      "name": "Fetch Tomorrow Jobs",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [460, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-creds",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const jobs = $input.all();\nconst reminders = [];\n\nfor (const item of jobs) {\n  const job = item.json;\n  const customer = job.customer;\n  \n  if (!customer?.phone) continue;\n  \n  const scheduledDate = new Date(job.scheduled_start);\n  const formattedTime = scheduledDate.toLocaleTimeString('en-US', {\n    hour: 'numeric',\n    minute: '2-digit'\n  });\n  \n  const message = `Reminder: Your appointment with Murray's Garage Door Service is tomorrow at ${formattedTime}. See you then! Reply to reschedule.`;\n  \n  reminders.push({\n    json: {\n      to_phone: customer.phone,\n      message: message,\n      job_id: job.id\n    }\n  });\n}\n\nreturn reminders;"
+      },
+      "id": "format-reminders",
+      "name": "Format Reminders",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openphone.com/v1/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"from\": \"{{ $env.QUO_PHONE_NUMBER_ID }}\",\n  \"to\": [\"{{ $json.to_phone }}\"],\n  \"body\": \"{{ $json.message }}\"\n}",
+        "options": {}
+      },
+      "id": "send-reminder",
+      "name": "Send Reminder SMS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "quo-api-creds",
+          "name": "Quo API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily 9 AM": {
+      "main": [[{"node": "Fetch Tomorrow Jobs", "type": "main", "index": 0}]]
+    },
+    "Fetch Tomorrow Jobs": {
+      "main": [[{"node": "Format Reminders", "type": "main", "index": 0}]]
+    },
+    "Format Reminders": {
+      "main": [[{"node": "Send Reminder SMS", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {"executionOrder": "v1"},
+  "tags": [{"name": "Murray FSM"}]
+}

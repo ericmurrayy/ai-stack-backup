@@ -1,0 +1,88 @@
+{
+  "name": "05 - En Route SMS",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "enroute-notification",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "En Route Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "enroute-notification"
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "schema": "public",
+        "table": "jobs",
+        "filterType": "string",
+        "filterString": "id=eq.{{ $json.job_id }}",
+        "options": {
+          "select": "*, customer:customers(*), location:locations(*)"
+        }
+      },
+      "id": "fetch-job",
+      "name": "Fetch Job",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [460, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-creds",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const job = $input.first().json;\nconst customer = job.customer;\nconst eta = $('En Route Trigger').item.json.eta_minutes || 15;\n\nif (!customer?.phone) {\n  throw new Error('Customer has no phone number');\n}\n\nconst message = `Hi ${customer.name}! Murray's Garage Door Service is on the way. ETA: approximately ${eta} minutes. See you soon!`;\n\nreturn [{\n  json: {\n    to_phone: customer.phone,\n    message: message,\n    job_id: job.id\n  }\n}];"
+      },
+      "id": "format-message",
+      "name": "Format Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openphone.com/v1/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"from\": \"{{ $env.QUO_PHONE_NUMBER_ID }}\",\n  \"to\": [\"{{ $json.to_phone }}\"],\n  \"body\": \"{{ $json.message }}\"\n}",
+        "options": {}
+      },
+      "id": "send-sms",
+      "name": "Send En Route SMS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "quo-api-creds",
+          "name": "Quo API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "En Route Trigger": {
+      "main": [[{"node": "Fetch Job", "type": "main", "index": 0}]]
+    },
+    "Fetch Job": {
+      "main": [[{"node": "Format Message", "type": "main", "index": 0}]]
+    },
+    "Format Message": {
+      "main": [[{"node": "Send En Route SMS", "type": "main", "index": 0}]]
+    }
+  },
+  "settings": {"executionOrder": "v1"},
+  "tags": [{"name": "Murray FSM"}]
+}
