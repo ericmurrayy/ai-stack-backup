@@ -2,7 +2,7 @@
 # Murray's FSM - Top-Level Doctor Script
 # =======================================
 # System diagnostics and validation for all components
-# Usage: ./scripts/doctor.sh [--mode dev|prod] [OPTIONS]
+# Usage: ./scripts/fsm-doctor.sh [--mode dev|prod] [OPTIONS]
 
 set -uo pipefail
 

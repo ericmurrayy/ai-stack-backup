@@ -2,7 +2,7 @@
 # Murray's FSM - Smoke Test Script
 # =================================
 # End-to-end validation of system components
-# Usage: ./scripts/smoke.sh [OPTIONS]
+# Usage: ./scripts/fsm-smoke.sh [OPTIONS]
 
 set -uo pipefail
 

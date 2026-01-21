@@ -6,16 +6,16 @@ This document tracks all requirements for a production launch.
 
 ```bash
 # Development setup
-./scripts/setup.sh --dev
+./scripts/fsm-setup.sh --dev
 
 # Production validation
-./scripts/setup.sh --prod
+./scripts/fsm-setup.sh --prod
 
 # System diagnostics
-./scripts/doctor.sh --mode prod --verbose
+./scripts/fsm-doctor.sh --mode prod --verbose
 
 # Smoke tests
-./scripts/smoke.sh
+./scripts/fsm-smoke.sh
 ```
 
 ---
@@ -287,8 +287,8 @@ Before launch, verify all critical flows:
 
 ### Pre-Launch (1 day before)
 - [ ] All acceptance tests passing
-- [ ] `./scripts/doctor.sh --mode prod` passes
-- [ ] `./scripts/smoke.sh` passes
+- [ ] `./scripts/fsm-doctor.sh --mode prod` passes
+- [ ] `./scripts/fsm-smoke.sh` passes
 - [ ] Database backup taken
 - [ ] Rollback plan documented
 
@@ -311,9 +311,9 @@ Before launch, verify all critical flows:
 
 Murray's FSM is considered **launch-ready** when:
 
-1. **One-Command Setup**: `./scripts/setup.sh --prod` validates all config
-2. **Health Check**: `./scripts/doctor.sh --mode prod` passes with no failures
-3. **Smoke Tests**: `./scripts/smoke.sh` passes all tests
+1. **One-Command Setup**: `./scripts/fsm-setup.sh --prod` validates all config
+2. **Health Check**: `./scripts/fsm-doctor.sh --mode prod` passes with no failures
+3. **Smoke Tests**: `./scripts/fsm-smoke.sh` passes all tests
 4. **Acceptance Tests**: All 4 acceptance tests pass on production
 5. **Approval Gate**: Verified that NO action executes without approval
 6. **Offline-First**: Data persists and syncs correctly
