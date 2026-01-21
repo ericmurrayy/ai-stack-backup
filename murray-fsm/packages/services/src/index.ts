@@ -5,3 +5,6 @@
 export * from './pdf';
 export * from './email';
 export * from './scheduling';
+export * from './plugins';
+export * from './webhooks';
+export * from './api-keys';

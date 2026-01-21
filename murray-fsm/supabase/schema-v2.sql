@@ -827,3 +827,174 @@ LEFT JOIN customers c ON j.customer_id = c.id
 LEFT JOIN locations l ON j.location_id = l.id
 WHERE tm.deleted = FALSE AND tm.is_active = TRUE
 ORDER BY tm.full_name, j.scheduled_start;
+
+-- ============================================================================
+-- EXTENSION 12: PLUGINS & INTEGRATIONS
+-- Third-party integrations and plugin management
+-- ============================================================================
+
+CREATE TABLE installed_plugins (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    owner_id UUID NOT NULL,
+    plugin_id TEXT NOT NULL,
+    enabled BOOLEAN DEFAULT TRUE,
+    config JSONB DEFAULT '{}'::jsonb, -- Encrypted sensitive values
+    installed_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    deleted BOOLEAN DEFAULT FALSE,
+    UNIQUE(owner_id, plugin_id)
+);
+
+CREATE INDEX idx_installed_plugins_owner ON installed_plugins(owner_id) WHERE deleted = FALSE;
+
+-- ============================================================================
+-- EXTENSION 13: WEBHOOKS
+-- Outgoing webhook endpoints
+-- ============================================================================
+
+CREATE TABLE webhook_endpoints (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    owner_id UUID NOT NULL,
+    url TEXT NOT NULL,
+    secret TEXT NOT NULL, -- Signing secret
+    events TEXT[] NOT NULL, -- Array of event types
+    description TEXT,
+    is_active BOOLEAN DEFAULT TRUE,
+    failure_count INTEGER DEFAULT 0,
+    last_triggered_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    deleted BOOLEAN DEFAULT FALSE
+);
+
+CREATE INDEX idx_webhook_endpoints_owner ON webhook_endpoints(owner_id) WHERE deleted = FALSE;
+CREATE INDEX idx_webhook_endpoints_active ON webhook_endpoints(owner_id, is_active) WHERE deleted = FALSE;
+
+CREATE TABLE webhook_deliveries (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    owner_id UUID NOT NULL,
+    webhook_id UUID NOT NULL REFERENCES webhook_endpoints(id) ON DELETE CASCADE,
+    event TEXT NOT NULL,
+    payload JSONB NOT NULL,
+    response_status INTEGER,
+    response_body TEXT,
+    delivered_at TIMESTAMPTZ,
+    error TEXT,
+    attempts INTEGER DEFAULT 1,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_webhook_deliveries_webhook ON webhook_deliveries(webhook_id, created_at DESC);
+CREATE INDEX idx_webhook_deliveries_recent ON webhook_deliveries(owner_id, created_at DESC);
+
+-- ============================================================================
+-- EXTENSION 14: API KEYS
+-- API access management
+-- ============================================================================
+
+CREATE TABLE api_keys (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    owner_id UUID NOT NULL,
+    name TEXT NOT NULL,
+    key_prefix TEXT NOT NULL, -- First 12 chars for display
+    key_hash TEXT NOT NULL, -- SHA-256 hash of full key
+    scopes TEXT[] NOT NULL, -- Array of permission scopes
+    description TEXT,
+    expires_at TIMESTAMPTZ,
+    last_used_at TIMESTAMPTZ,
+    is_active BOOLEAN DEFAULT TRUE,
+    rate_limit_per_minute INTEGER DEFAULT 100,
+    allowed_ips TEXT[] DEFAULT '{}',
+    created_by UUID NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    deleted BOOLEAN DEFAULT FALSE
+);
+
+CREATE INDEX idx_api_keys_owner ON api_keys(owner_id) WHERE deleted = FALSE;
+CREATE INDEX idx_api_keys_hash ON api_keys(key_hash) WHERE deleted = FALSE AND is_active = TRUE;
+CREATE INDEX idx_api_keys_prefix ON api_keys(key_prefix) WHERE deleted = FALSE;
+
+CREATE TABLE api_key_usage (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    owner_id UUID NOT NULL,
+    api_key_id UUID NOT NULL REFERENCES api_keys(id) ON DELETE CASCADE,
+    endpoint TEXT NOT NULL,
+    method TEXT NOT NULL,
+    status_code INTEGER NOT NULL,
+    response_time_ms INTEGER,
+    ip_address INET,
+    user_agent TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_api_key_usage_key ON api_key_usage(api_key_id, created_at DESC);
+CREATE INDEX idx_api_key_usage_recent ON api_key_usage(owner_id, created_at DESC);
+
+-- Partition api_key_usage by month for performance (optional, for high-volume)
+-- CREATE TABLE api_key_usage_y2024m01 PARTITION OF api_key_usage
+--     FOR VALUES FROM ('2024-01-01') TO ('2024-02-01');
+
+-- ============================================================================
+-- FUNCTIONS: API Key validation
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION validate_api_key(key_hash_input TEXT)
+RETURNS TABLE (
+    api_key_id UUID,
+    owner_id UUID,
+    scopes TEXT[],
+    rate_limit_per_minute INTEGER
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        ak.id,
+        ak.owner_id,
+        ak.scopes,
+        ak.rate_limit_per_minute
+    FROM api_keys ak
+    WHERE ak.key_hash = key_hash_input
+      AND ak.deleted = FALSE
+      AND ak.is_active = TRUE
+      AND (ak.expires_at IS NULL OR ak.expires_at > NOW());
+
+    -- Update last_used_at
+    UPDATE api_keys
+    SET last_used_at = NOW()
+    WHERE key_hash = key_hash_input
+      AND deleted = FALSE
+      AND is_active = TRUE;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ============================================================================
+-- FUNCTIONS: Trigger webhooks
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION trigger_webhook_event(
+    p_owner_id UUID,
+    p_event TEXT,
+    p_payload JSONB
+)
+RETURNS INTEGER AS $$
+DECLARE
+    webhook_count INTEGER := 0;
+BEGIN
+    -- Queue webhooks for delivery (in production, use pg_notify or a job queue)
+    INSERT INTO webhook_deliveries (owner_id, webhook_id, event, payload)
+    SELECT
+        p_owner_id,
+        we.id,
+        p_event,
+        p_payload
+    FROM webhook_endpoints we
+    WHERE we.owner_id = p_owner_id
+      AND we.deleted = FALSE
+      AND we.is_active = TRUE
+      AND p_event = ANY(we.events);
+
+    GET DIAGNOSTICS webhook_count = ROW_COUNT;
+    RETURN webhook_count;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
