@@ -18,6 +18,12 @@ source "${LIB_DIR}/common.sh"
 source "${LIB_DIR}/fsm.sh"
 # shellcheck source=../lib/storage.sh
 source "${LIB_DIR}/storage.sh"
+# shellcheck source=../lib/lock.sh
+source "${LIB_DIR}/lock.sh"
+# shellcheck source=../lib/services.sh
+source "${LIB_DIR}/services.sh"
+# shellcheck source=../lib/notify.sh
+source "${LIB_DIR}/notify.sh"
 
 # Configuration
 CONFIG_FILE="${BACKUP_SYSTEM_DIR}/config/backup.conf"
@@ -45,6 +51,10 @@ Commands:
     config              Show current configuration
     validate            Validate system configuration
     history             Show state transition history
+    lock                Show lock status
+    services            Show service status (Docker, systemd)
+    explain OPERATION   Explain what an operation would do (dry-run)
+    notify-test         Test notification configuration
 
 Options:
     -c, --config FILE   Config file (default: config/backup.conf)
@@ -542,6 +552,135 @@ EOF
     output_json "success" "$data" "Retrieved last $count history entries"
 }
 
+# Show lock status
+cmd_lock() {
+    lock_init
+
+    local lock_data
+    lock_data=$(lock_info_json)
+
+    output_json "success" "$lock_data" "Lock status retrieved"
+}
+
+# Show service status
+cmd_services() {
+    local services_data
+    services_data=$(services_status_json)
+
+    output_json "success" "$services_data" "Service status retrieved"
+}
+
+# Explain what an operation would do (dry-run for AI agents)
+cmd_explain() {
+    local operation="${1:-backup}"
+
+    local steps=()
+    local affected_paths=()
+
+    case "$operation" in
+        backup)
+            steps=(
+                "1. Acquire exclusive lock to prevent concurrent operations"
+                "2. Quiesce services (stop Docker containers, pause systemd services)"
+                "3. Collect backup sources from configured directories and files"
+                "4. Capture environment (Python packages, Node.js, system packages)"
+                "5. Compress collected data into archive (${COMPRESSION:-gzip})"
+            )
+            if [[ "${ENCRYPTION_ENABLED:-false}" == "true" ]]; then
+                steps+=("6. Encrypt archive with AES-256-CBC")
+            fi
+            steps+=(
+                "7. Upload archive to storage (${STORAGE_TYPE:-local})"
+                "8. Verify upload integrity"
+                "9. Apply retention policy (keep ${RETENTION_DAILY:-7} daily, ${RETENTION_WEEKLY:-4} weekly, ${RETENTION_MONTHLY:-3} monthly)"
+                "10. Resume services and release lock"
+            )
+
+            # List affected paths
+            for dir in ${BACKUP_DIRS:-}; do
+                affected_paths+=("$dir")
+            done
+            for file in ${BACKUP_FILES:-}; do
+                affected_paths+=("$file")
+            done
+            ;;
+
+        restore)
+            steps=(
+                "1. Acquire exclusive lock to prevent concurrent operations"
+                "2. Stop services that will be affected by restore"
+                "3. Create pre-restore backup of current state (safety snapshot)"
+                "4. Download backup archive from storage"
+                "5. Verify archive integrity (checksum verification)"
+            )
+            if [[ "${ENCRYPTION_ENABLED:-false}" == "true" ]]; then
+                steps+=("6. Decrypt archive")
+            fi
+            steps+=(
+                "7. Decompress archive"
+                "8. Restore files to original locations (with .bak suffix for existing files)"
+                "9. Copy environment restoration script"
+                "10. Verify restored files exist"
+                "11. Resume services and release lock"
+            )
+
+            # Paths that would be restored
+            for dir in ${BACKUP_DIRS:-}; do
+                affected_paths+=("$dir (will be restored)")
+            done
+            ;;
+
+        *)
+            output_error "Unknown operation: $operation. Use 'backup' or 'restore'"
+            return 1
+            ;;
+    esac
+
+    local steps_json
+    steps_json=$(printf '%s\n' "${steps[@]}" | jq -R . | jq -s .)
+
+    local paths_json="[]"
+    if [[ ${#affected_paths[@]} -gt 0 ]]; then
+        paths_json=$(printf '%s\n' "${affected_paths[@]}" | jq -R . | jq -s .)
+    fi
+
+    local data
+    data=$(cat << EOF
+{
+    "operation": "$operation",
+    "steps": $steps_json,
+    "affected_paths": $paths_json,
+    "storage_type": "${STORAGE_TYPE:-local}",
+    "encryption_enabled": ${ENCRYPTION_ENABLED:-false},
+    "compression": "${COMPRESSION:-gzip}",
+    "quiesce_docker": ${QUIESCE_DOCKER:-true},
+    "quiesce_systemd": ${QUIESCE_SYSTEMD:-false},
+    "estimated_impact": "Services will be temporarily stopped during operation"
+}
+EOF
+)
+
+    output_json "success" "$data" "Explanation for $operation operation"
+}
+
+# Test notification configuration
+cmd_notify_test() {
+    notify_test
+
+    local data
+    data=$(cat << EOF
+{
+    "channels": "${NOTIFY_CHANNELS:-log}",
+    "enabled": ${NOTIFY_ENABLED:-true},
+    "notify_on_success": ${NOTIFY_ON_SUCCESS:-true},
+    "notify_on_failure": ${NOTIFY_ON_FAILURE:-true}
+}
+EOF
+)
+
+    output_json "success" "$data" "Test notification sent"
+}
+
 # Parse global arguments and dispatch
 main() {
     local command=""
@@ -613,6 +752,18 @@ main() {
             ;;
         history)
             cmd_history
+            ;;
+        lock)
+            cmd_lock
+            ;;
+        services)
+            cmd_services
+            ;;
+        explain)
+            cmd_explain "$@"
+            ;;
+        notify-test)
+            cmd_notify_test
             ;;
         help)
             usage

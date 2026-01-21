@@ -2,6 +2,22 @@
 
 A robust, FSM-based backup and restore system designed for AI agent coordination (Claude/Open Interpreter).
 
+## Platform Support
+
+| Platform | Status | Notes |
+|----------|--------|-------|
+| Ubuntu/Debian Linux | ✅ Fully Supported | Primary target platform |
+| Other Linux (RHEL, Alpine) | ✅ Supported | Requires bash 4.0+ |
+| macOS | ✅ Supported | Homebrew for dependencies |
+| Windows (WSL2) | ✅ Supported | Via Windows Subsystem for Linux |
+| Windows (Native) | ❌ Not Supported | Use WSL2 instead |
+
+### Dependencies
+
+- **Required**: bash 4.0+, tar, gzip, rsync
+- **Recommended**: jq (JSON processing), openssl (encryption)
+- **Optional**: aws-cli (S3), gsutil (GCS), az-cli (Azure)
+
 ## Features
 
 - **FSM State Management**: Reliable state tracking for backup/restore operations
@@ -11,6 +27,10 @@ A robust, FSM-based backup and restore system designed for AI agent coordination
 - **Environment Capture**: Python packages, Node.js, system packages, environment variables
 - **Idempotent Restore**: Safe restoration with backup of existing files
 - **AI Agent Interface**: JSON-based controller for Claude/Open Interpreter
+- **Concurrent Run Prevention**: Lock mechanism prevents overlapping operations
+- **Service Quiescing**: Stops Docker/systemd services for consistent backups
+- **Pre-Restore Backup**: Safety snapshot before restoring
+- **Multi-Channel Notifications**: Webhook, Slack, Discord, Email, Desktop
 
 ## Quick Start
 
@@ -51,6 +71,12 @@ ENCRYPTION_KEY="your-secret-key"
 ./scripts/restore.sh backup-2024-01-15.tar.gz  # Specific backup
 ```
 
+### 5. Run Tests
+
+```bash
+./scripts/test-backup-system.sh
+```
+
 ## AI Agent Interface
 
 The FSM controller provides a JSON interface for AI agents:
@@ -68,9 +94,40 @@ The FSM controller provides a JSON interface for AI agents:
 # Restore from backup
 ./scripts/fsm-controller.sh restore backup-2024-01-15.tar.gz
 
+# Explain what an operation would do (for AI planning)
+./scripts/fsm-controller.sh explain backup
+
+# Check lock status
+./scripts/fsm-controller.sh lock
+
+# Check service status
+./scripts/fsm-controller.sh services
+
 # Handle errors
 ./scripts/fsm-controller.sh error
 ./scripts/fsm-controller.sh clear-error
+```
+
+### AI Agent: Explain Mode
+
+Before running operations, AI agents can ask for an explanation:
+
+```bash
+$ ./scripts/fsm-controller.sh explain backup
+{
+    "status": "success",
+    "data": {
+        "operation": "backup",
+        "steps": [
+            "1. Acquire exclusive lock to prevent concurrent operations",
+            "2. Quiesce services (stop Docker containers, pause systemd services)",
+            "3. Collect backup sources from configured directories and files",
+            ...
+        ],
+        "affected_paths": [...],
+        "estimated_impact": "Services will be temporarily stopped during operation"
+    }
+}
 ```
 
 ### Example AI Agent Workflow
@@ -78,17 +135,28 @@ The FSM controller provides a JSON interface for AI agents:
 ```python
 import subprocess
 import json
+import time
 
-def run_controller(command):
-    result = subprocess.run(
-        ['./scripts/fsm-controller.sh', command],
-        capture_output=True, text=True
-    )
+def run_controller(command, args=None):
+    cmd = ['./scripts/fsm-controller.sh', command]
+    if args:
+        cmd.extend(args)
+    result = subprocess.run(cmd, capture_output=True, text=True)
     return json.loads(result.stdout)
 
-# Check status
+# Check system status and lock
 status = run_controller('status')
-print(f"Current state: {status['data']['state']}")
+lock = run_controller('lock')
+
+if lock['data']['locked']:
+    print(f"System busy: {lock['data']['operation']}")
+    exit(1)
+
+# Explain what backup will do
+explanation = run_controller('explain', ['backup'])
+print("Backup will perform these steps:")
+for step in explanation['data']['steps']:
+    print(f"  {step}")
 
 # Start backup if idle
 if status['data']['state'] == 'idle':
@@ -213,22 +281,72 @@ RETENTION_MONTHLY=3  # Keep 1st of month for 3 months
 COMPRESSION="gzip"
 ```
 
+### Service Quiescing
+
+```bash
+# Enable service quiescing for consistent backups
+QUIESCE_SERVICES=true
+
+# Docker container management
+QUIESCE_DOCKER=true
+DOCKER_CONTAINERS=""  # Space-separated, empty = all running containers
+
+# Systemd service management
+QUIESCE_SYSTEMD=true
+SYSTEMD_SERVICES="myapp mydb"  # Space-separated service names
+```
+
+### Notifications
+
+```bash
+# Enable notifications
+NOTIFY_ENABLED=true
+NOTIFY_CHANNELS="log webhook slack"  # Space-separated channels
+NOTIFY_ON_SUCCESS=true
+NOTIFY_ON_FAILURE=true
+
+# Webhook
+WEBHOOK_URL="https://example.com/webhook"
+
+# Slack
+SLACK_WEBHOOK_URL="https://hooks.slack.com/services/..."
+SLACK_CHANNEL="#backups"
+
+# Discord
+DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/..."
+
+# Email
+EMAIL_TO="admin@example.com"
+EMAIL_FROM="backup@localhost"
+```
+
+### Pre-Restore Safety
+
+```bash
+# Create safety backup before restoring
+PRE_RESTORE_BACKUP=true
+```
+
 ## Directory Structure
 
 ```
 backup-system/
 ├── config/
-│   └── backup.conf       # Configuration file
+│   └── backup.conf            # Configuration file
 ├── lib/
-│   ├── common.sh         # Shared utilities
-│   ├── fsm.sh            # FSM state management
-│   └── storage.sh        # Multi-backend storage
+│   ├── common.sh              # Shared utilities
+│   ├── fsm.sh                 # FSM state management
+│   ├── storage.sh             # Multi-backend storage
+│   ├── lock.sh                # Concurrent run prevention
+│   ├── services.sh            # Docker/systemd management
+│   └── notify.sh              # Multi-channel notifications
 ├── scripts/
-│   ├── backup.sh         # Main backup script
-│   ├── restore.sh        # Main restore script
-│   └── fsm-controller.sh # AI agent interface
-├── states/               # FSM state files
-├── logs/                 # Operation logs
+│   ├── backup.sh              # Main backup script
+│   ├── restore.sh             # Main restore script
+│   ├── fsm-controller.sh      # AI agent interface
+│   └── test-backup-system.sh  # Test suite
+├── states/                    # FSM state files
+├── logs/                      # Operation logs
 └── README.md
 ```
 
@@ -283,6 +401,36 @@ Commands:
     config              Show current configuration
     validate            Validate system configuration
     history             Show state transition history
+    lock                Show lock status
+    services            Show service status (Docker, systemd)
+    explain OPERATION   Explain what an operation would do (dry-run)
+    notify-test         Test notification configuration
+```
+
+## Testing
+
+Run the test suite to verify the system works correctly:
+
+```bash
+# Run all tests
+./scripts/test-backup-system.sh
+
+# Setup test environment only
+./scripts/test-backup-system.sh setup
+
+# Cleanup test environment
+./scripts/test-backup-system.sh cleanup
+```
+
+### CI/CD Integration
+
+For GitHub Actions:
+
+```yaml
+- name: Test Backup System
+  run: |
+    cd murray-fsm/backup-system
+    ./scripts/test-backup-system.sh
 ```
 
 ## Environment Restoration
@@ -327,6 +475,26 @@ Require manual intervention:
 ./scripts/fsm-controller.sh transition idle  # Reset to idle
 ```
 
+## Concurrency Protection
+
+The system uses file-based locking to prevent concurrent operations:
+
+```bash
+# Check if system is locked
+./scripts/fsm-controller.sh lock
+
+# Output example:
+{
+    "locked": true,
+    "pid": 12345,
+    "host": "myserver",
+    "operation": "backup",
+    "age_seconds": 120
+}
+```
+
+Stale locks (older than 1 hour) are automatically cleared.
+
 ## Logging
 
 Logs are stored in `logs/` directory:
@@ -351,6 +519,44 @@ This backup system is designed to work with the main Murray's FSM application:
 # Backup Murray's FSM data
 BACKUP_DIRS="/path/to/murray-fsm/apps /path/to/murray-fsm/supabase"
 BACKUP_FILES="/path/to/murray-fsm/.env /path/to/murray-fsm/package.json"
+```
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    AI Agent (Claude)                        │
+│                                                             │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐     │
+│  │   explain   │───▶│   backup    │───▶│   status    │     │
+│  └─────────────┘    └─────────────┘    └─────────────┘     │
+└─────────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│                   fsm-controller.sh                         │
+│                   (JSON Interface)                          │
+└─────────────────────────────────────────────────────────────┘
+                            │
+        ┌───────────────────┼───────────────────┐
+        ▼                   ▼                   ▼
+┌───────────────┐   ┌───────────────┐   ┌───────────────┐
+│   backup.sh   │   │  restore.sh   │   │   lib/*.sh    │
+│               │   │               │   │               │
+│ ┌───────────┐ │   │ ┌───────────┐ │   │ ├─ common.sh  │
+│ │ FSM Loop  │ │   │ │ FSM Loop  │ │   │ ├─ fsm.sh     │
+│ └───────────┘ │   │ └───────────┘ │   │ ├─ storage.sh │
+└───────────────┘   └───────────────┘   │ ├─ lock.sh    │
+                                        │ ├─ services.sh│
+                                        │ └─ notify.sh  │
+                                        └───────────────┘
+                            │
+        ┌───────────────────┼───────────────────┐
+        ▼                   ▼                   ▼
+┌───────────────┐   ┌───────────────┐   ┌───────────────┐
+│    Local      │   │     S3        │   │     GCS       │
+│   Storage     │   │   Storage     │   │   Storage     │
+└───────────────┘   └───────────────┘   └───────────────┘
 ```
 
 ## License

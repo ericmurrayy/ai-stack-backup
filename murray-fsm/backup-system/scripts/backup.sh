@@ -17,6 +17,12 @@ source "${LIB_DIR}/common.sh"
 source "${LIB_DIR}/fsm.sh"
 # shellcheck source=../lib/storage.sh
 source "${LIB_DIR}/storage.sh"
+# shellcheck source=../lib/lock.sh
+source "${LIB_DIR}/lock.sh"
+# shellcheck source=../lib/services.sh
+source "${LIB_DIR}/services.sh"
+# shellcheck source=../lib/notify.sh
+source "${LIB_DIR}/notify.sh"
 
 # Globals
 BACKUP_NAME=""
@@ -744,12 +750,53 @@ main() {
     # Check dependencies
     check_dependencies || exit 1
 
-    # Run backup
-    if run_backup; then
-        exit 0
-    else
+    # Acquire lock to prevent concurrent runs
+    if ! lock_acquire "backup"; then
+        log_error "Another backup/restore operation is in progress"
         exit 1
     fi
+
+    # Setup cleanup trap
+    trap 'cleanup_on_exit' EXIT INT TERM
+
+    # Notify backup started
+    notify_backup_started "${BACKUP_PREFIX:-backup}"
+
+    # Quiesce services for consistent backup
+    if [[ "${QUIESCE_SERVICES:-true}" == "true" ]]; then
+        services_quiesce_all || log_warn "Some services could not be quiesced"
+    fi
+
+    # Run backup
+    local exit_code=0
+    if run_backup; then
+        local end_time
+        end_time=$(date +%s)
+        local duration=$((end_time - START_TIME))
+        local size="unknown"
+        [[ -f "${ARCHIVE_FILE:-}" ]] && size=$(format_size "$(get_file_size "$ARCHIVE_FILE")")
+        notify_backup_completed "$BACKUP_NAME" "$duration" "$size"
+    else
+        exit_code=$?
+        notify_backup_failed "${BACKUP_NAME:-backup}" "Backup failed with exit code $exit_code"
+    fi
+
+    exit $exit_code
+}
+
+# Cleanup on exit
+cleanup_on_exit() {
+    local exit_code=$?
+
+    # Resume services if they were quiesced
+    if [[ "${QUIESCE_SERVICES:-true}" == "true" ]]; then
+        services_resume_all || log_warn "Some services could not be resumed"
+    fi
+
+    # Release lock
+    lock_release
+
+    exit $exit_code
 }
 
 # Run main if executed directly

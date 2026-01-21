@@ -17,6 +17,12 @@ source "${LIB_DIR}/common.sh"
 source "${LIB_DIR}/fsm.sh"
 # shellcheck source=../lib/storage.sh
 source "${LIB_DIR}/storage.sh"
+# shellcheck source=../lib/lock.sh
+source "${LIB_DIR}/lock.sh"
+# shellcheck source=../lib/services.sh
+source "${LIB_DIR}/services.sh"
+# shellcheck source=../lib/notify.sh
+source "${LIB_DIR}/notify.sh"
 
 # Globals
 BACKUP_SOURCE=""
@@ -740,6 +746,58 @@ run_restore() {
     done
 }
 
+# Create pre-restore backup of current state
+pre_restore_backup() {
+    if [[ "${PRE_RESTORE_BACKUP:-true}" != "true" ]]; then
+        log_debug "Pre-restore backup disabled"
+        return 0
+    fi
+
+    if [[ "${DRY_RUN:-false}" == "true" ]]; then
+        log_info "[DRY RUN] Would create pre-restore backup"
+        return 0
+    fi
+
+    log_info "Creating pre-restore backup of current state..."
+
+    local pre_backup_name="pre-restore-$(generate_timestamp)"
+    local pre_backup_dir="${LOCAL_BACKUP_DIR:-$HOME/backups}/${pre_backup_name}"
+    mkdir -p "$pre_backup_dir"
+
+    # Only backup directories that will be affected by restore
+    if [[ -n "$MANIFEST_FILE" && -f "$MANIFEST_FILE" ]] && command -v jq &>/dev/null; then
+        while IFS= read -r source; do
+            [[ -z "$source" ]] && continue
+
+            local path type
+            path=$(echo "$source" | jq -r '.path')
+            type=$(echo "$source" | jq -r '.type')
+
+            local target_path
+            if [[ "$RESTORE_TARGET" == "/" ]]; then
+                target_path="$path"
+            else
+                target_path="${RESTORE_TARGET}${path}"
+            fi
+
+            if [[ -e "$target_path" ]]; then
+                local backup_name
+                backup_name=$(echo "$target_path" | tr '/' '_' | sed 's/^_//')
+
+                if [[ "$type" == "directory" && -d "$target_path" ]]; then
+                    rsync -a "$target_path/" "${pre_backup_dir}/${backup_name}/" 2>/dev/null || true
+                elif [[ "$type" == "file" && -f "$target_path" ]]; then
+                    mkdir -p "${pre_backup_dir}/files"
+                    cp "$target_path" "${pre_backup_dir}/files/" 2>/dev/null || true
+                fi
+            fi
+        done < <(jq -c '.sources[]' "$MANIFEST_FILE" 2>/dev/null)
+    fi
+
+    log_info "Pre-restore backup created: $pre_backup_dir"
+    export PRE_RESTORE_BACKUP_DIR="$pre_backup_dir"
+}
+
 # Main entry point
 main() {
     START_TIME=$(date +%s)
@@ -752,12 +810,51 @@ main() {
     # Check dependencies
     check_dependencies || exit 1
 
-    # Run restore
-    if run_restore; then
-        exit 0
-    else
+    # Acquire lock to prevent concurrent runs
+    if ! lock_acquire "restore"; then
+        log_error "Another backup/restore operation is in progress"
         exit 1
     fi
+
+    # Setup cleanup trap
+    trap 'cleanup_on_exit' EXIT INT TERM
+
+    # Notify restore started
+    notify_restore_started "$BACKUP_SOURCE"
+
+    # Stop services before restore
+    if [[ "${QUIESCE_SERVICES:-true}" == "true" ]]; then
+        services_quiesce_all || log_warn "Some services could not be stopped"
+    fi
+
+    # Run restore
+    local exit_code=0
+    if run_restore; then
+        local end_time
+        end_time=$(date +%s)
+        local duration=$((end_time - START_TIME))
+        notify_restore_completed "$BACKUP_SOURCE" "$duration"
+    else
+        exit_code=$?
+        notify_restore_failed "$BACKUP_SOURCE" "Restore failed with exit code $exit_code"
+    fi
+
+    exit $exit_code
+}
+
+# Cleanup on exit
+cleanup_on_exit() {
+    local exit_code=$?
+
+    # Resume services
+    if [[ "${QUIESCE_SERVICES:-true}" == "true" ]]; then
+        services_resume_all || log_warn "Some services could not be restarted"
+    fi
+
+    # Release lock
+    lock_release
+
+    exit $exit_code
 }
 
 # Run main if executed directly
