@@ -67,8 +67,8 @@ check_prerequisites() {
     fi
     log_success "Bash version: ${bash_version}"
 
-    # Check required commands
-    local required_cmds=("tar" "gzip" "rsync")
+    # Check required commands (tar and gzip are essential)
+    local required_cmds=("tar" "gzip")
     local missing=()
 
     for cmd in "${required_cmds[@]}"; do
@@ -85,8 +85,8 @@ check_prerequisites() {
     fi
     log_success "Required commands available"
 
-    # Check recommended commands (warn only)
-    local recommended_cmds=("jq" "openssl")
+    # Check recommended commands (warn only, system has fallbacks)
+    local recommended_cmds=("rsync" "jq" "openssl")
     local missing_recommended=()
 
     for cmd in "${recommended_cmds[@]}"; do
