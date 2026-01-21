@@ -1,0 +1,134 @@
+# Murray's FSM - Backup System Configuration
+# ==========================================
+# Copy this file to backup.conf and customize for your environment
+
+# ============================================
+# Backup Sources
+# ============================================
+
+# Directories to backup (space-separated)
+BACKUP_DIRS="$HOME/projects $HOME/Documents"
+
+# Individual files to backup (space-separated)
+BACKUP_FILES="$HOME/.bashrc $HOME/.gitconfig"
+
+# Patterns to exclude from backup (space-separated)
+EXCLUDE_PATTERNS="node_modules .git __pycache__ *.log *.tmp .DS_Store"
+
+# ============================================
+# Storage Configuration
+# ============================================
+
+# Storage type: local, s3, gcs, azure
+STORAGE_TYPE="local"
+
+# Local storage settings
+LOCAL_BACKUP_DIR="$HOME/backups"
+
+# AWS S3 settings (if STORAGE_TYPE="s3")
+# S3_BUCKET="my-backup-bucket"
+# S3_PREFIX="backups"
+# S3_REGION="us-east-1"
+
+# Google Cloud Storage settings (if STORAGE_TYPE="gcs")
+# GCS_BUCKET="my-backup-bucket"
+# GCS_PREFIX="backups"
+
+# Azure Blob Storage settings (if STORAGE_TYPE="azure")
+# AZURE_CONTAINER="backups"
+# AZURE_PREFIX="fsm"
+# AZURE_STORAGE_ACCOUNT="mystorageaccount"
+
+# ============================================
+# Compression
+# ============================================
+
+# Compression type: gzip, bzip2, xz, zstd, none
+COMPRESSION="gzip"
+
+# ============================================
+# Security
+# ============================================
+
+# Enable encryption (AES-256-CBC)
+ENCRYPTION_ENABLED=false
+
+# Encryption key (use key file for production)
+# ENCRYPTION_KEY="your-secret-key"
+# ENCRYPTION_KEY_FILE="/path/to/encryption.key"
+
+# Checksum algorithm: sha256, sha512, md5
+CHECKSUM_ALGORITHM="sha256"
+
+# ============================================
+# Environment Capture
+# ============================================
+
+# Capture environment (pip packages, npm packages, system packages)
+CAPTURE_ENVIRONMENT=true
+
+# ============================================
+# Retention Policy
+# ============================================
+
+# Enable automatic backup retention
+RETENTION_ENABLED=false
+
+# Retention periods
+RETENTION_DAILY=7     # Keep daily backups for N days
+RETENTION_WEEKLY=4    # Keep weekly backups for N weeks
+RETENTION_MONTHLY=3   # Keep monthly backups for N months
+
+# ============================================
+# Service Quiescing
+# ============================================
+
+# Enable service quiescing for consistent backups
+QUIESCE_SERVICES=false
+
+# Docker container management
+QUIESCE_DOCKER=false
+DOCKER_CONTAINERS=""  # Space-separated, empty = all running containers
+
+# Systemd service management
+QUIESCE_SYSTEMD=false
+SYSTEMD_SERVICES=""  # Space-separated service names
+
+# ============================================
+# Notifications
+# ============================================
+
+# Enable notifications
+NOTIFY_ENABLED=true
+
+# Notification channels: log, webhook, slack, discord, email, desktop
+NOTIFY_CHANNELS="log"
+
+# Send notifications on success/failure
+NOTIFY_ON_SUCCESS=true
+NOTIFY_ON_FAILURE=true
+
+# Webhook URL (for generic webhook notifications)
+# WEBHOOK_URL="https://example.com/webhook"
+
+# Slack settings
+# SLACK_WEBHOOK_URL="https://hooks.slack.com/services/..."
+# SLACK_CHANNEL="#backups"
+
+# Discord settings
+# DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/..."
+
+# Email settings
+# EMAIL_TO="admin@example.com"
+# EMAIL_FROM="backup@localhost"
+
+# ============================================
+# Safety Options
+# ============================================
+
+# Create safety backup before restoring
+PRE_RESTORE_BACKUP=true
+
+# Storage retry configuration
+STORAGE_MAX_RETRIES=3
+STORAGE_RETRY_DELAY=2
