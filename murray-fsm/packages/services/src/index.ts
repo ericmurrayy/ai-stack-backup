@@ -8,3 +8,4 @@ export * from './scheduling';
 export * from './plugins';
 export * from './webhooks';
 export * from './api-keys';
+export * from './routing';
