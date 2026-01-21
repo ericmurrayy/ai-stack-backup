@@ -130,7 +130,14 @@ EOF
 cleanup_test_environment() {
     log_test "Cleaning up test environment..."
     rm -rf "$TEST_DIR"
-    # Also clean up any lock files
+    # Also clean up any lock files and FSM state
+    rm -f /tmp/murray-fsm/backup.lock
+    rm -f /tmp/fsm_state.json
+}
+
+# Reset FSM state before each test
+reset_fsm_state() {
+    rm -f /tmp/fsm_state.json
     rm -f /tmp/murray-fsm/backup.lock
 }
 
@@ -216,11 +223,17 @@ test_checksum_calculation() {
 }
 
 test_backup_dry_run() {
+    # Reset FSM state for clean test
+    reset_fsm_state
+
     # Test backup in dry-run mode
     "${SCRIPT_DIR}/backup.sh" -c "$TEST_CONFIG" -d -n "test-dry" 2>&1 | grep -q "DRY RUN"
 }
 
 test_full_backup() {
+    # Reset FSM state for clean test
+    reset_fsm_state
+
     # Test full backup operation
     "${SCRIPT_DIR}/backup.sh" -c "$TEST_CONFIG" -n "test-full" -v
 

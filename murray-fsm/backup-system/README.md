@@ -34,7 +34,27 @@ A robust, FSM-based backup and restore system designed for AI agent coordination
 
 ## Quick Start
 
-### 1. Configure
+### 1. Run Setup
+
+```bash
+# One-command setup (creates directories, makes scripts executable)
+./scripts/setup.sh
+
+# Or with configuration initialization
+./scripts/setup.sh --init --backup-dir ~/backups
+```
+
+### 2. Check System Health
+
+```bash
+# Run diagnostics
+./scripts/doctor.sh
+
+# Attempt automatic fixes
+./scripts/doctor.sh --fix
+```
+
+### 3. Configure
 
 Edit `config/backup.conf`:
 
@@ -52,26 +72,26 @@ ENCRYPTION_ENABLED=true
 ENCRYPTION_KEY="your-secret-key"
 ```
 
-### 2. Run Backup
+### 4. Run Backup
 
 ```bash
 ./scripts/backup.sh
 ```
 
-### 3. List Backups
+### 5. List Backups
 
 ```bash
 ./scripts/restore.sh -l
 ```
 
-### 4. Restore
+### 6. Restore
 
 ```bash
 ./scripts/restore.sh              # Latest backup
 ./scripts/restore.sh backup-2024-01-15.tar.gz  # Specific backup
 ```
 
-### 5. Run Tests
+### 7. Run Tests
 
 ```bash
 ./scripts/test-backup-system.sh
@@ -341,6 +361,8 @@ backup-system/
 │   ├── services.sh            # Docker/systemd management
 │   └── notify.sh              # Multi-channel notifications
 ├── scripts/
+│   ├── setup.sh               # One-command setup
+│   ├── doctor.sh              # System diagnostics
 │   ├── backup.sh              # Main backup script
 │   ├── restore.sh             # Main restore script
 │   ├── fsm-controller.sh      # AI agent interface
@@ -351,6 +373,49 @@ backup-system/
 ```
 
 ## Command Reference
+
+### setup.sh
+
+```
+Usage: setup.sh [OPTIONS]
+
+Options:
+    --init              Create configuration from example
+    --backup-dir DIR    Set local backup directory
+    --no-doctor         Skip running doctor after setup
+    --quiet, -q         Minimal output
+    -h, --help          Show this help
+
+Examples:
+    ./scripts/setup.sh                              # Basic setup
+    ./scripts/setup.sh --init --backup-dir /backups # Full init
+    ./scripts/setup.sh --init --no-doctor --quiet   # CI mode
+```
+
+### doctor.sh
+
+```
+Usage: doctor.sh [OPTIONS]
+
+Options:
+    --fix       Attempt to fix issues automatically
+    --verbose   Show detailed output
+    --json      Output results as JSON
+    -h, --help  Show this help
+
+Checks performed:
+    - Bash version (4.0+ required)
+    - Required commands (tar, gzip, rsync)
+    - Recommended commands (jq, openssl)
+    - Cloud CLI tools (aws, gsutil, az)
+    - Directory structure
+    - Configuration file
+    - Write permissions
+    - Lock status
+    - FSM state
+    - Storage configuration
+    - Disk space
+```
 
 ### backup.sh
 

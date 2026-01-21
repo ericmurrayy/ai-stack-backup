@@ -17,7 +17,7 @@ WEBHOOK_HEADERS="${WEBHOOK_HEADERS:-Content-Type: application/json}"
 # Slack configuration
 SLACK_WEBHOOK_URL="${SLACK_WEBHOOK_URL:-}"
 SLACK_CHANNEL="${SLACK_CHANNEL:-}"
-SLACK_USERNAME="${SLACK_USERNAME:-Murray's FSM}"
+SLACK_USERNAME="${SLACK_USERNAME:-Murray FSM Backup}"
 
 # Discord configuration
 DISCORD_WEBHOOK_URL="${DISCORD_WEBHOOK_URL:-}"
@@ -25,7 +25,7 @@ DISCORD_WEBHOOK_URL="${DISCORD_WEBHOOK_URL:-}"
 # Email configuration
 EMAIL_TO="${EMAIL_TO:-}"
 EMAIL_FROM="${EMAIL_FROM:-backup@localhost}"
-EMAIL_SUBJECT_PREFIX="${EMAIL_SUBJECT_PREFIX:-[Murray's FSM]}"
+EMAIL_SUBJECT_PREFIX="${EMAIL_SUBJECT_PREFIX:-[Murray FSM Backup]}"
 
 # ============================================
 # Core Notification Functions

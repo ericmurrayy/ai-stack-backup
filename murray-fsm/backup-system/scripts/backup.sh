@@ -125,6 +125,7 @@ parse_args() {
 
 # Initialize backup
 backup_init() {
+    fsm_transition "backup_init"
     log_state "Initializing backup"
 
     # Generate backup name with timestamp
@@ -233,6 +234,7 @@ collect_sources() {
     if [[ $collected -eq 0 ]]; then
         log_error "No sources collected"
         fsm_set_error "No backup sources found" "recoverable"
+        fsm_transition "error_recoverable" "" "true"
         return 1
     fi
 
@@ -691,30 +693,26 @@ run_backup() {
             idle)
                 backup_init
                 ;;
-            backup_init)
-                # Already handled in backup_init function
+            collect_sources)
                 collect_sources
                 ;;
-            collect_sources)
-                # Handled by transition
-                ;;
             capture_environment)
-                # Handled by transition
+                capture_environment
                 ;;
             compress)
-                # Handled by transition
+                compress
                 ;;
             encrypt)
-                # Handled by transition
+                encrypt
                 ;;
             upload)
-                # Handled by transition
+                upload
                 ;;
             verify_upload)
-                # Handled by transition
+                verify_upload
                 ;;
             cleanup_backup)
-                # Handled by transition
+                cleanup_backup
                 ;;
             backup_done)
                 return 0
