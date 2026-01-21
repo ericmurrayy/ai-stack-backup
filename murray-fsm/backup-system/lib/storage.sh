@@ -6,10 +6,10 @@
 set -euo pipefail
 
 # Source common library
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_STORAGE_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if ! declare -f log_info &>/dev/null; then
     # shellcheck source=./common.sh
-    source "${SCRIPT_DIR}/common.sh"
+    source "${_STORAGE_LIB_DIR}/common.sh"
 fi
 
 # Configuration for retries
@@ -475,7 +475,8 @@ storage_get_latest() {
     latest=$(storage_list "$prefix" | head -n 1)
 
     if [[ -z "$latest" ]]; then
-        log_warn "No backups found with prefix: $prefix"
+        # Redirect to stderr to avoid polluting JSON output
+        log_warn "No backups found with prefix: $prefix" >&2
         return 1
     fi
 
@@ -559,22 +560,37 @@ storage_verify_upload() {
 
     log_debug "Verifying upload: $filename"
 
-    # List storage and check if file exists
-    local found=false
-    while IFS= read -r item; do
-        if [[ "$item" == *"$filename"* ]]; then
-            found=true
-            break
-        fi
-    done < <(storage_list "" 2>/dev/null)
+    case "$storage_type" in
+        local)
+            local backup_dir="${LOCAL_BACKUP_DIR:-$HOME/backups}"
+            local full_path="${backup_dir}/${filename}"
+            if [[ -f "$full_path" ]]; then
+                log_debug "Upload verified: $filename"
+                return 0
+            fi
+            ;;
+        s3)
+            if aws s3 ls "s3://${S3_BUCKET}/${S3_PREFIX:-backups}/${filename}" &>/dev/null; then
+                log_debug "Upload verified: $filename"
+                return 0
+            fi
+            ;;
+        gcs)
+            if gsutil ls "gs://${GCS_BUCKET}/${GCS_PREFIX:-backups}/${filename}" &>/dev/null; then
+                log_debug "Upload verified: $filename"
+                return 0
+            fi
+            ;;
+        azure)
+            if az storage blob show --account-name "${AZURE_STORAGE_ACCOUNT}" --container-name "${AZURE_CONTAINER}" --name "${AZURE_PREFIX:-backups}/${filename}" &>/dev/null; then
+                log_debug "Upload verified: $filename"
+                return 0
+            fi
+            ;;
+    esac
 
-    if [[ "$found" == "true" ]]; then
-        log_debug "Upload verified: $filename"
-        return 0
-    else
-        log_error "Upload verification failed: $filename not found in storage"
-        return 1
-    fi
+    log_error "Upload verification failed: $filename not found in storage"
+    return 1
 }
 
 # Upload with verification (ensures upload succeeded)

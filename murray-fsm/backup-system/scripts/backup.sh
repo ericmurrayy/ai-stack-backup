@@ -183,13 +183,22 @@ collect_sources() {
                     exclude_args+=" --exclude=$pattern"
                 done
 
-                # Copy with rsync for efficiency
+                # Copy directory contents (prefer rsync, fallback to cp)
                 if [[ "${DRY_RUN:-false}" != "true" ]]; then
-                    rsync -a $exclude_args "$dir/" "${SOURCES_DIR}/${target_name}/" 2>/dev/null || {
-                        log_warn "Failed to collect directory: $dir"
-                        ((failed++)) || true
-                        continue
-                    }
+                    if command -v rsync &>/dev/null; then
+                        rsync -a $exclude_args "$dir/" "${SOURCES_DIR}/${target_name}/" 2>/dev/null || {
+                            log_warn "Failed to collect directory: $dir"
+                            ((failed++)) || true
+                            continue
+                        }
+                    else
+                        # Fallback to cp when rsync is not available
+                        cp -r "$dir/." "${SOURCES_DIR}/${target_name}/" 2>/dev/null || {
+                            log_warn "Failed to collect directory: $dir"
+                            ((failed++)) || true
+                            continue
+                        }
+                    fi
                 fi
 
                 ((collected++)) || true
@@ -567,6 +576,7 @@ encrypt() {
     else
         log_error "Encryption failed"
         fsm_set_error "Encryption failed" "recoverable"
+        fsm_transition "error_recoverable" "" "true"
         return 1
     fi
 
@@ -585,7 +595,7 @@ upload() {
 
     local upload_result
 
-    if fsm_execute_with_retry "storage_upload \"$ARCHIVE_FILE\""; then
+    if fsm_execute_with_retry storage_upload "$ARCHIVE_FILE"; then
         upload_result=$?
         log_info "Upload successful"
 
@@ -594,6 +604,7 @@ upload() {
     else
         log_error "Upload failed after retries"
         fsm_set_error "Upload failed" "recoverable"
+        fsm_transition "error_recoverable" "" "true"
         return 1
     fi
 

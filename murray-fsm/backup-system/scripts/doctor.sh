@@ -86,7 +86,8 @@ check_bash_version() {
 }
 
 check_required_commands() {
-    local required_cmds=("tar" "gzip" "rsync" "date" "mkdir" "rm" "cp" "mv")
+    # Core commands that are essential (tar, gzip for compression; others for file ops)
+    local required_cmds=("tar" "gzip" "date" "mkdir" "rm" "cp" "mv")
     local missing=()
 
     for cmd in "${required_cmds[@]}"; do
@@ -103,7 +104,8 @@ check_required_commands() {
 }
 
 check_recommended_commands() {
-    local recommended_cmds=("jq" "openssl")
+    # rsync is recommended but cp is used as fallback
+    local recommended_cmds=("rsync" "jq" "openssl")
     local missing=()
 
     for cmd in "${recommended_cmds[@]}"; do
@@ -113,9 +115,9 @@ check_recommended_commands() {
     done
 
     if [[ ${#missing[@]} -eq 0 ]]; then
-        log_pass "Recommended commands" "jq, openssl available"
+        log_pass "Recommended commands" "rsync, jq, openssl available"
     else
-        log_warn "Recommended commands" "Missing: ${missing[*]} (some features may not work)"
+        log_warn "Recommended commands" "Missing: ${missing[*]} (using fallbacks where available)"
     fi
 }
 

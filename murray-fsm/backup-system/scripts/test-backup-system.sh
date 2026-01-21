@@ -87,6 +87,9 @@ setup_test_environment() {
     cat > "$TEST_CONFIG" << EOF
 # Test configuration for Murray's FSM Backup System
 
+# Backup prefix (matches the -n test-full used in tests)
+BACKUP_PREFIX="test-full"
+
 # Backup sources
 BACKUP_DIRS="$TEST_SOURCE_DIR"
 BACKUP_FILES=""
@@ -226,8 +229,27 @@ test_backup_dry_run() {
     # Reset FSM state for clean test
     reset_fsm_state
 
-    # Test backup in dry-run mode
-    "${SCRIPT_DIR}/backup.sh" -c "$TEST_CONFIG" -d -n "test-dry" 2>&1 | grep -q "DRY RUN"
+    # Ensure test config and source directory exist
+    if [[ ! -f "$TEST_CONFIG" ]] || [[ ! -d "$TEST_SOURCE_DIR" ]]; then
+        log_test "Test environment not ready, skipping dry-run test"
+        return 1
+    fi
+
+    # Test backup in dry-run mode - capture output and check for DRY RUN message
+    local output
+    output=$("${SCRIPT_DIR}/backup.sh" -c "$TEST_CONFIG" -d -n "test-dry" 2>&1)
+    local exit_code=$?
+
+    # Check if output contains DRY RUN
+    if echo "$output" | grep -q "DRY RUN"; then
+        return 0
+    else
+        echo "Expected 'DRY RUN' in output but not found"
+        echo "Exit code: $exit_code"
+        echo "Output (last 20 lines):"
+        echo "$output" | tail -20
+        return 1
+    fi
 }
 
 test_full_backup() {
@@ -261,29 +283,55 @@ test_backup_manifest() {
 }
 
 test_list_backups() {
-    # Test listing backups
-    "${SCRIPT_DIR}/restore.sh" -c "$TEST_CONFIG" -l 2>&1 | grep -q "test-full"
+    # Test listing backups - capture output for debugging
+    local output
+    output=$("${SCRIPT_DIR}/restore.sh" -c "$TEST_CONFIG" -l 2>&1)
+
+    if echo "$output" | grep -q "test-full"; then
+        return 0
+    else
+        echo "Expected 'test-full' in backup list"
+        echo "SCRIPT_DIR=$SCRIPT_DIR"
+        echo "TEST_CONFIG=$TEST_CONFIG"
+        echo "Output:"
+        echo "$output"
+        return 1
+    fi
 }
 
 test_restore_dry_run() {
-    # Test restore in dry-run mode
-    "${SCRIPT_DIR}/restore.sh" -c "$TEST_CONFIG" -d -L 2>&1 | grep -q "DRY RUN"
+    # Reset FSM state for clean test
+    reset_fsm_state
+
+    # Test restore in dry-run mode - capture output and check for DRY RUN message
+    local output
+    output=$("${SCRIPT_DIR}/restore.sh" -c "$TEST_CONFIG" -d -L 2>&1)
+
+    # Check if output contains DRY RUN
+    if echo "$output" | grep -q "DRY RUN"; then
+        return 0
+    else
+        echo "Expected 'DRY RUN' in output but not found"
+        echo "Output (last 20 lines):"
+        echo "$output" | tail -20
+        return 1
+    fi
 }
 
 test_full_restore() {
     # Test full restore operation
     "${SCRIPT_DIR}/restore.sh" -c "$TEST_CONFIG" -t "$TEST_RESTORE_DIR" -L -v
 
-    # Verify restored files exist
-    local source_name
-    source_name=$(echo "$TEST_SOURCE_DIR" | tr '/' '_' | sed 's/^_//')
+    # Verify restored files exist (restore preserves full directory structure)
+    # The restored path will be: TEST_RESTORE_DIR + original_absolute_path
+    local restored_source_dir="${TEST_RESTORE_DIR}${TEST_SOURCE_DIR}"
 
-    [[ -d "${TEST_RESTORE_DIR}/sources/${source_name}" ]] || return 1
+    [[ -d "$restored_source_dir" ]] || return 1
 
     # Check file contents match
     local original restored
     original=$(cat "$TEST_SOURCE_DIR/file1.txt")
-    restored=$(cat "${TEST_RESTORE_DIR}/sources/${source_name}/file1.txt" 2>/dev/null || echo "not found")
+    restored=$(cat "${restored_source_dir}/file1.txt" 2>/dev/null || echo "not found")
 
     [[ "$original" == "$restored" ]]
 }
@@ -428,15 +476,34 @@ test_concurrent_lock_prevention() {
 
 test_missing_source_handling() {
     # Test behavior when backup source doesn't exist
-    source "${BACKUP_SYSTEM_DIR}/lib/common.sh"
-    load_config "$TEST_CONFIG"
+    reset_fsm_state
 
-    # Backup a non-existent directory should warn but not crash
-    export BACKUP_DIRS="/nonexistent/path/12345"
-    export BACKUP_FILES=""
+    # Create a temp config with non-existent paths
+    local temp_config="${TEST_DIR}/missing_source.conf"
+    cat > "$temp_config" << EOF
+BACKUP_DIRS="/nonexistent/path/12345"
+BACKUP_FILES=""
+STORAGE_TYPE="local"
+LOCAL_BACKUP_DIR="$TEST_BACKUP_DIR"
+COMPRESSION="gzip"
+ENCRYPTION_ENABLED=false
+QUIESCE_SERVICES=false
+NOTIFY_CHANNELS="log"
+EOF
 
-    # This should fail gracefully (no sources)
-    ! "${SCRIPT_DIR}/backup.sh" -c "$TEST_CONFIG" -d 2>&1 | grep -q "FATAL"
+    # Backup with non-existent source should warn but not crash with FATAL
+    local output
+    output=$("${SCRIPT_DIR}/backup.sh" -c "$temp_config" -d 2>&1) || true
+
+    # Should not contain FATAL error
+    if echo "$output" | grep -q "FATAL"; then
+        echo "Unexpected FATAL error in output"
+        return 1
+    fi
+
+    # Cleanup temp config
+    rm -f "$temp_config"
+    return 0
 }
 
 test_storage_verification() {

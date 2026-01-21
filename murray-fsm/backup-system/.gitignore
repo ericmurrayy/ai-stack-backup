@@ -1,0 +1,9 @@
+# Runtime state files
+states/current_state
+states/*.json
+
+# Log files
+logs/*.log
+
+# Test workspace (created during testing)
+test-workspace/

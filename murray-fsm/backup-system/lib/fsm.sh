@@ -6,10 +6,10 @@
 set -euo pipefail
 
 # Source common library if not already loaded
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_FSM_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if ! declare -f log_info &>/dev/null; then
     # shellcheck source=./common.sh
-    source "${SCRIPT_DIR}/common.sh"
+    source "${_FSM_LIB_DIR}/common.sh"
 fi
 
 # FSM States
@@ -117,6 +117,37 @@ fsm_get_state() {
         jq -r '.current_state' "$state_file"
     else
         grep -o '"current_state": *"[^"]*"' "$state_file" | cut -d'"' -f4
+    fi
+}
+
+# Get full FSM state data as JSON
+fsm_get_state_data() {
+    local state_file="${FSM_STATE_FILE:-/tmp/fsm_state.json}"
+
+    if [[ ! -f "$state_file" ]]; then
+        fsm_init
+    fi
+
+    if command_exists jq; then
+        jq '.' "$state_file"
+    else
+        cat "$state_file"
+    fi
+}
+
+# Get current error message
+fsm_get_error() {
+    local state_file="${FSM_STATE_FILE:-/tmp/fsm_state.json}"
+
+    if [[ ! -f "$state_file" ]]; then
+        echo ""
+        return 0
+    fi
+
+    if command_exists jq; then
+        jq -r '.error.message // empty' "$state_file"
+    else
+        grep -o '"message": *"[^"]*"' "$state_file" | head -1 | cut -d'"' -f4 || echo ""
     fi
 }
 
@@ -372,7 +403,7 @@ fsm_reset() {
 }
 
 # Export FSM functions
-export -f fsm_init fsm_get_state fsm_set_state
+export -f fsm_init fsm_get_state fsm_get_state_data fsm_get_error fsm_set_state
 export -f fsm_get_metadata fsm_set_metadata
 export -f fsm_increment_retry fsm_get_retry_count fsm_reset_retry
 export -f fsm_set_error fsm_clear_error
