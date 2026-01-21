@@ -189,6 +189,7 @@ parse_args() {
 
 # Initialize restore
 restore_init() {
+    fsm_transition "restore_init"
     log_state "Initializing restore"
 
     # Generate work directory
@@ -241,7 +242,7 @@ download() {
 
     log_info "Downloading to: $ARCHIVE_FILE"
 
-    if fsm_execute_with_retry "storage_download \"$BACKUP_SOURCE\" \"$ARCHIVE_FILE\""; then
+    if fsm_execute_with_retry storage_download "$BACKUP_SOURCE" "$ARCHIVE_FILE"; then
         log_info "Download complete"
 
         # Also download manifest if available
@@ -256,6 +257,7 @@ download() {
     else
         log_error "Download failed after retries"
         fsm_set_error "Download failed" "recoverable"
+        fsm_transition "error_recoverable" "" "true"
         return 1
     fi
 
@@ -275,6 +277,7 @@ verify_download() {
     if [[ ! -f "$ARCHIVE_FILE" ]]; then
         log_error "Archive file not found: $ARCHIVE_FILE"
         fsm_set_error "Archive file missing" "recoverable"
+        fsm_transition "error_recoverable" "" "true"
         return 1
     fi
 
@@ -302,6 +305,7 @@ verify_download() {
                     log_error "Expected: $expected_checksum"
                     log_error "Actual:   $actual_checksum"
                     fsm_set_error "Checksum verification failed" "fatal"
+                    fsm_transition "error_fatal" "" "true"
                     return 1
                 fi
             fi
@@ -332,6 +336,7 @@ decrypt() {
     if [[ -z "${ENCRYPTION_KEY:-}" && -z "${ENCRYPTION_KEY_FILE:-}" ]]; then
         log_error "No encryption key configured"
         fsm_set_error "Encryption key required" "fatal"
+        fsm_transition "error_fatal" "" "true"
         return 1
     fi
 
@@ -344,6 +349,7 @@ decrypt() {
     else
         log_error "Decryption failed"
         fsm_set_error "Decryption failed" "fatal"
+        fsm_transition "error_fatal" "" "true"
         return 1
     fi
 
@@ -385,6 +391,7 @@ decompress() {
             else
                 log_error "zstd not available"
                 fsm_set_error "zstd required for decompression" "fatal"
+                fsm_transition "error_fatal" "" "true"
                 return 1
             fi
             ;;
@@ -393,6 +400,7 @@ decompress() {
     tar $tar_opts "$ARCHIVE_FILE" -C "$extract_dir" || {
         log_error "Extraction failed"
         fsm_set_error "Archive extraction failed" "fatal"
+        fsm_transition "error_fatal" "" "true"
         return 1
     }
 
@@ -461,11 +469,18 @@ restore_apply() {
         # Create target directory
         mkdir -p "$target_path"
 
-        # Idempotent restore using rsync
-        rsync -a --backup --suffix=".bak-$(date +%Y%m%d%H%M%S)" \
-            "$source_dir" "$target_path/" || {
-            log_warn "Failed to restore: $dir_name"
-        }
+        # Idempotent restore (prefer rsync, fallback to cp)
+        if command -v rsync &>/dev/null; then
+            rsync -a --backup --suffix=".bak-$(date +%Y%m%d%H%M%S)" \
+                "$source_dir" "$target_path/" || {
+                log_warn "Failed to restore: $dir_name"
+            }
+        else
+            # Fallback to cp when rsync is not available
+            cp -r "$source_dir"/* "$target_path/" 2>/dev/null || {
+                log_warn "Failed to restore: $dir_name"
+            }
+        fi
     done
 
     # Restore individual files
@@ -697,34 +712,32 @@ run_restore() {
             idle)
                 restore_init
                 ;;
-            restore_init)
-                # Handled in restore_init function
-                ;;
             download)
-                # Handled by transition
+                download
                 ;;
             verify_download)
-                # Handled by transition
+                verify_download
                 ;;
             decrypt)
-                # Handled by transition
+                decrypt
                 ;;
             decompress)
-                # Handled by transition
+                decompress
                 ;;
             restore_apply)
-                # Handled by transition
+                restore_apply
                 ;;
             restore_environment)
-                # Handled by transition
+                restore_environment
                 ;;
             restore_verify)
-                # Handled by transition
+                restore_verify
                 ;;
             cleanup_restore)
-                # Handled by transition
+                cleanup_restore
                 ;;
             restore_done)
+                restore_done
                 return 0
                 ;;
             error|error_recoverable)
@@ -785,7 +798,11 @@ pre_restore_backup() {
                 backup_name=$(echo "$target_path" | tr '/' '_' | sed 's/^_//')
 
                 if [[ "$type" == "directory" && -d "$target_path" ]]; then
-                    rsync -a "$target_path/" "${pre_backup_dir}/${backup_name}/" 2>/dev/null || true
+                    if command -v rsync &>/dev/null; then
+                        rsync -a "$target_path/" "${pre_backup_dir}/${backup_name}/" 2>/dev/null || true
+                    else
+                        cp -r "$target_path/." "${pre_backup_dir}/${backup_name}/" 2>/dev/null || true
+                    fi
                 elif [[ "$type" == "file" && -f "$target_path" ]]; then
                     mkdir -p "${pre_backup_dir}/files"
                     cp "$target_path" "${pre_backup_dir}/files/" 2>/dev/null || true

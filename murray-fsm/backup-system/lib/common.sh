@@ -18,12 +18,12 @@ if [[ -z "${_MURRAY_COMMON_LOADED:-}" ]]; then
     readonly NC='\033[0m' # No Color
 fi
 
-# Script directory
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+# Library directory (internal use, doesn't overwrite caller's SCRIPT_DIR)
+_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_COMMON_ROOT_DIR="$(cd "${_LIB_DIR}/../.." && pwd)"
 
 # Default config location
-CONFIG_FILE="${SCRIPT_DIR}/../config/backup.conf"
+CONFIG_FILE="${_LIB_DIR}/../config/backup.conf"
 
 # Logging functions
 log_debug() {
@@ -655,20 +655,28 @@ is_safe_restore_target() {
         "/bin"
         "/sbin"
         "/usr"
+        "/usr/bin"
+        "/usr/sbin"
+        "/usr/local"
         "/etc"
         "/var"
         "/boot"
         "/dev"
         "/proc"
         "/sys"
+        "/lib"
+        "/lib64"
+        "/usr/lib"
+        "/usr/lib64"
     )
 
     # Resolve to absolute path
     local abs_target
     abs_target=$(realpath -m "$target" 2>/dev/null || echo "$target")
 
+    # Check both the original path and resolved path
     for dangerous in "${dangerous_paths[@]}"; do
-        if [[ "$abs_target" == "$dangerous" ]]; then
+        if [[ "$target" == "$dangerous" ]] || [[ "$abs_target" == "$dangerous" ]]; then
             return 1
         fi
     done
