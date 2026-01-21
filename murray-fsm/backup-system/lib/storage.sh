@@ -475,7 +475,8 @@ storage_get_latest() {
     latest=$(storage_list "$prefix" | head -n 1)
 
     if [[ -z "$latest" ]]; then
-        log_warn "No backups found with prefix: $prefix"
+        # Redirect to stderr to avoid polluting JSON output
+        log_warn "No backups found with prefix: $prefix" >&2
         return 1
     fi
 
