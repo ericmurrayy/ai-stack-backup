@@ -998,3 +998,47 @@ BEGIN
     RETURN webhook_count;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ============================================================================
+-- EXTENSION 15: MOBILE SYNC
+-- Device sync tracking for offline-first mobile app
+-- ============================================================================
+
+CREATE TABLE device_sync_log (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    owner_id UUID NOT NULL,
+    device_id TEXT NOT NULL,
+    device_name TEXT,
+    device_platform TEXT, -- 'ios', 'android'
+    app_version TEXT,
+    sync_type TEXT NOT NULL, -- 'full', 'incremental'
+    records_sent INTEGER DEFAULT 0,
+    records_received INTEGER DEFAULT 0,
+    duration_ms INTEGER,
+    error TEXT,
+    synced_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_device_sync_owner ON device_sync_log(owner_id, synced_at DESC);
+CREATE INDEX idx_device_sync_device ON device_sync_log(device_id, synced_at DESC);
+
+-- ============================================================================
+-- EXTENSION 16: ROUTE OPTIMIZATION CACHE
+-- Cache optimized routes to avoid recalculation
+-- ============================================================================
+
+CREATE TABLE route_optimization_cache (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    owner_id UUID NOT NULL,
+    technician_id UUID REFERENCES team_members(id) ON DELETE CASCADE,
+    route_date DATE NOT NULL,
+    job_ids UUID[] NOT NULL,
+    optimized_order UUID[] NOT NULL,
+    total_distance_meters INTEGER,
+    total_duration_minutes INTEGER,
+    calculated_at TIMESTAMPTZ DEFAULT NOW(),
+    expires_at TIMESTAMPTZ DEFAULT NOW() + INTERVAL '1 hour',
+    UNIQUE(owner_id, technician_id, route_date)
+);
+
+CREATE INDEX idx_route_cache_lookup ON route_optimization_cache(owner_id, route_date) WHERE expires_at > NOW();
