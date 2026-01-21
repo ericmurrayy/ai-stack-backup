@@ -42,7 +42,28 @@ Offline-first Field Service Management system for solo garage door operators.
 
 ## Quick Start
 
-### Prerequisites
+### One-Command Setup (Recommended)
+
+```bash
+# Clone the repository
+git clone https://github.com/your-org/murray-fsm.git
+cd murray-fsm
+
+# Development setup (installs deps, creates .env files, starts local Supabase)
+./scripts/setup.sh --dev
+
+# Run system diagnostics
+./scripts/doctor.sh --verbose
+
+# Run smoke tests
+./scripts/smoke.sh
+```
+
+See [LAUNCH.md](LAUNCH.md) for the complete launch readiness checklist.
+
+### Manual Setup
+
+#### Prerequisites
 
 - Node.js 18+
 - pnpm 8+
@@ -51,7 +72,7 @@ Offline-first Field Service Management system for solo garage door operators.
 - Stripe account
 - n8n instance (self-hosted or cloud)
 
-### 1. Clone & Install
+#### 1. Clone & Install
 
 ```bash
 git clone https://github.com/your-org/murray-fsm.git
@@ -59,7 +80,7 @@ cd murray-fsm
 pnpm install
 ```
 
-### 2. Setup Supabase
+#### 2. Setup Supabase
 
 1. Create a new Supabase project
 2. Run the schema:
@@ -89,7 +110,7 @@ supabase secrets set STRIPE_SECRET_KEY=sk_xxx
 supabase secrets set STRIPE_PUBLISHABLE_KEY=pk_xxx
 ```
 
-### 3. Setup n8n
+#### 3. Setup n8n
 
 1. Import all workflows from `docs/n8n/`
 2. Configure credentials (see `docs/n8n-workflows.md`)
@@ -109,7 +130,7 @@ GOOGLE_CALENDAR_ID=primary
 
 4. Activate all workflows
 
-### 4. Setup Quo/OpenPhone
+#### 4. Setup Quo/OpenPhone
 
 See `docs/quo-setup.md` for detailed instructions.
 
@@ -117,7 +138,7 @@ See `docs/quo-setup.md` for detailed instructions.
 2. Create webhook pointing to n8n
 3. Copy signing secret
 
-### 5. Setup Stripe
+#### 5. Setup Stripe
 
 See `docs/stripe-setup.md` for detailed instructions.
 
@@ -125,11 +146,11 @@ See `docs/stripe-setup.md` for detailed instructions.
 2. Create webhook pointing to n8n
 3. Copy webhook secret
 
-### 6. Setup Calendar
+#### 6. Setup Calendar
 
 See `docs/calendar-setup.md` for detailed instructions.
 
-### 7. Configure Mobile App
+#### 7. Configure Mobile App
 
 ```bash
 cd apps/mobile
@@ -149,7 +170,7 @@ Run the app:
 pnpm dev:mobile
 ```
 
-### 8. Configure Web Dashboard
+#### 8. Configure Web Dashboard
 
 ```bash
 cd apps/web
