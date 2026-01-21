@@ -317,6 +317,168 @@ test_controller_lock() {
 }
 
 # ============================================
+# Edge Case and Failure Scenario Tests
+# ============================================
+
+test_atomic_write() {
+    # Test atomic write operations
+    source "${BACKUP_SYSTEM_DIR}/lib/common.sh"
+    load_config "$TEST_CONFIG"
+
+    local test_file="${TEST_DIR}/atomic_test.txt"
+    local content="Test atomic content"
+
+    atomic_write "$test_file" "$content" || return 1
+
+    [[ -f "$test_file" ]] || return 1
+    [[ "$(cat "$test_file")" == "$content" ]]
+}
+
+test_atomic_copy() {
+    # Test atomic copy with verification
+    source "${BACKUP_SYSTEM_DIR}/lib/common.sh"
+    load_config "$TEST_CONFIG"
+
+    local source_file="${TEST_DIR}/source_atomic.txt"
+    local target_file="${TEST_DIR}/target_atomic.txt"
+
+    echo "Source content for atomic copy" > "$source_file"
+
+    atomic_copy "$source_file" "$target_file" "true" || return 1
+
+    [[ -f "$target_file" ]] || return 1
+
+    # Verify content matches
+    local src_content tgt_content
+    src_content=$(cat "$source_file")
+    tgt_content=$(cat "$target_file")
+    [[ "$src_content" == "$tgt_content" ]]
+}
+
+test_retry_mechanism() {
+    # Test retry with backoff (should succeed on first try)
+    source "${BACKUP_SYSTEM_DIR}/lib/common.sh"
+    load_config "$TEST_CONFIG"
+
+    # Command that succeeds
+    retry_with_backoff 3 1 true
+}
+
+test_safe_restore_target() {
+    # Test that dangerous paths are rejected
+    source "${BACKUP_SYSTEM_DIR}/lib/common.sh"
+    load_config "$TEST_CONFIG"
+
+    # Root should be unsafe
+    if is_safe_restore_target "/"; then
+        return 1
+    fi
+
+    # /bin should be unsafe
+    if is_safe_restore_target "/bin"; then
+        return 1
+    fi
+
+    # /tmp should be safe
+    if ! is_safe_restore_target "/tmp/restore-test"; then
+        return 1
+    fi
+
+    # Home directory should be safe
+    if ! is_safe_restore_target "$HOME/restore-test"; then
+        return 1
+    fi
+
+    return 0
+}
+
+test_concurrent_lock_prevention() {
+    # Test that concurrent operations are prevented
+    source "${BACKUP_SYSTEM_DIR}/lib/common.sh"
+    source "${BACKUP_SYSTEM_DIR}/lib/lock.sh"
+    load_config "$TEST_CONFIG"
+
+    # Acquire lock
+    lock_acquire "test-concurrent" || return 1
+
+    # Try to acquire again (should fail)
+    local second_attempt_failed=false
+    if ! lock_acquire "test-concurrent" 2>/dev/null; then
+        second_attempt_failed=true
+    fi
+
+    # Release lock
+    lock_release
+
+    [[ "$second_attempt_failed" == "true" ]]
+}
+
+test_missing_source_handling() {
+    # Test behavior when backup source doesn't exist
+    source "${BACKUP_SYSTEM_DIR}/lib/common.sh"
+    load_config "$TEST_CONFIG"
+
+    # Backup a non-existent directory should warn but not crash
+    export BACKUP_DIRS="/nonexistent/path/12345"
+    export BACKUP_FILES=""
+
+    # This should fail gracefully (no sources)
+    ! "${SCRIPT_DIR}/backup.sh" -c "$TEST_CONFIG" -d 2>&1 | grep -q "FATAL"
+}
+
+test_storage_verification() {
+    # Test storage upload verification
+    source "${BACKUP_SYSTEM_DIR}/lib/common.sh"
+    source "${BACKUP_SYSTEM_DIR}/lib/storage.sh"
+    load_config "$TEST_CONFIG"
+
+    # Create a test file
+    local test_file="${TEST_DIR}/verify_test.txt"
+    echo "Verification test content" > "$test_file"
+
+    # Upload to local storage
+    storage_upload_local "$test_file" "verify_test.txt" || return 1
+
+    # Verify it exists
+    storage_verify_upload "verify_test.txt"
+}
+
+test_config_validation() {
+    # Test configuration validation catches missing config
+    source "${BACKUP_SYSTEM_DIR}/lib/common.sh"
+    load_config "$TEST_CONFIG"
+
+    # With valid config, should pass
+    export BACKUP_DIRS="$TEST_SOURCE_DIR"
+    export STORAGE_TYPE="local"
+    export ENCRYPTION_ENABLED="false"
+
+    validate_config
+}
+
+test_checksum_integrity() {
+    # Test checksum detects file corruption
+    source "${BACKUP_SYSTEM_DIR}/lib/common.sh"
+    load_config "$TEST_CONFIG"
+
+    local test_file="${TEST_DIR}/checksum_integrity.txt"
+    echo "Original content" > "$test_file"
+
+    # Calculate original checksum
+    local original_checksum
+    original_checksum=$(calculate_checksum "$test_file")
+
+    # Modify file
+    echo "Modified content" > "$test_file"
+
+    # New checksum should be different
+    local modified_checksum
+    modified_checksum=$(calculate_checksum "$test_file")
+
+    [[ "$original_checksum" != "$modified_checksum" ]]
+}
+
+# ============================================
 # Test Runner
 # ============================================
 
@@ -353,6 +515,16 @@ run_all_tests() {
     run_test "Controller explain command" test_controller_explain
     run_test "Controller validate command" test_controller_validate
     run_test "Controller lock command" test_controller_lock
+
+    # Edge case and failure scenario tests
+    run_test "Atomic write operations work" test_atomic_write
+    run_test "Atomic copy with verification works" test_atomic_copy
+    run_test "Retry mechanism works" test_retry_mechanism
+    run_test "Dangerous restore paths rejected" test_safe_restore_target
+    run_test "Concurrent lock prevention works" test_concurrent_lock_prevention
+    run_test "Storage verification works" test_storage_verification
+    run_test "Configuration validation works" test_config_validation
+    run_test "Checksum detects corruption" test_checksum_integrity
 
     # Cleanup
     cleanup_test_environment

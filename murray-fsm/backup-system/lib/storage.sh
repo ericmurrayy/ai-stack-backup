@@ -12,7 +12,11 @@ if ! declare -f log_info &>/dev/null; then
     source "${SCRIPT_DIR}/common.sh"
 fi
 
-# Upload file to storage
+# Configuration for retries
+STORAGE_MAX_RETRIES="${STORAGE_MAX_RETRIES:-3}"
+STORAGE_RETRY_DELAY="${STORAGE_RETRY_DELAY:-2}"
+
+# Upload file to storage with retry
 storage_upload() {
     local source_file="$1"
     local destination="${2:-}"
@@ -25,27 +29,28 @@ storage_upload() {
 
     log_info "Uploading to $storage_type storage: $source_file"
 
+    local upload_func
     case "$storage_type" in
-        local)
-            storage_upload_local "$source_file" "$destination"
-            ;;
-        s3)
-            storage_upload_s3 "$source_file" "$destination"
-            ;;
-        gcs)
-            storage_upload_gcs "$source_file" "$destination"
-            ;;
-        azure)
-            storage_upload_azure "$source_file" "$destination"
-            ;;
+        local)  upload_func="storage_upload_local" ;;
+        s3)     upload_func="storage_upload_s3" ;;
+        gcs)    upload_func="storage_upload_gcs" ;;
+        azure)  upload_func="storage_upload_azure" ;;
         *)
             log_error "Unknown storage type: $storage_type"
             return 1
             ;;
     esac
+
+    # For cloud storage, use retry mechanism
+    if [[ "$storage_type" != "local" ]]; then
+        retry_with_backoff "$STORAGE_MAX_RETRIES" "$STORAGE_RETRY_DELAY" \
+            "$upload_func" "$source_file" "$destination"
+    else
+        "$upload_func" "$source_file" "$destination"
+    fi
 }
 
-# Download file from storage
+# Download file from storage with retry
 storage_download() {
     local source="$1"
     local destination="$2"
@@ -53,24 +58,25 @@ storage_download() {
 
     log_info "Downloading from $storage_type storage: $source"
 
+    local download_func
     case "$storage_type" in
-        local)
-            storage_download_local "$source" "$destination"
-            ;;
-        s3)
-            storage_download_s3 "$source" "$destination"
-            ;;
-        gcs)
-            storage_download_gcs "$source" "$destination"
-            ;;
-        azure)
-            storage_download_azure "$source" "$destination"
-            ;;
+        local)  download_func="storage_download_local" ;;
+        s3)     download_func="storage_download_s3" ;;
+        gcs)    download_func="storage_download_gcs" ;;
+        azure)  download_func="storage_download_azure" ;;
         *)
             log_error "Unknown storage type: $storage_type"
             return 1
             ;;
     esac
+
+    # For cloud storage, use retry mechanism
+    if [[ "$storage_type" != "local" ]]; then
+        retry_with_backoff "$STORAGE_MAX_RETRIES" "$STORAGE_RETRY_DELAY" \
+            "$download_func" "$source" "$destination"
+    else
+        "$download_func" "$source" "$destination"
+    fi
 }
 
 # List backups in storage
@@ -140,7 +146,12 @@ storage_upload_local() {
         destination="$backup_dir/$destination"
     fi
 
-    cp "$source_file" "$destination"
+    # Use atomic copy for safe file operations
+    if declare -f atomic_copy &>/dev/null; then
+        atomic_copy "$source_file" "$destination" "true" || return 1
+    else
+        cp "$source_file" "$destination" || return 1
+    fi
 
     local size
     size=$(get_file_size "$destination")
@@ -541,6 +552,51 @@ storage_apply_retention() {
     log_info "Retention complete: $kept kept, $deleted deleted (of $count total)"
 }
 
+# Verify upload was successful by checking file exists in storage
+storage_verify_upload() {
+    local filename="$1"
+    local storage_type="${STORAGE_TYPE:-local}"
+
+    log_debug "Verifying upload: $filename"
+
+    # List storage and check if file exists
+    local found=false
+    while IFS= read -r item; do
+        if [[ "$item" == *"$filename"* ]]; then
+            found=true
+            break
+        fi
+    done < <(storage_list "" 2>/dev/null)
+
+    if [[ "$found" == "true" ]]; then
+        log_debug "Upload verified: $filename"
+        return 0
+    else
+        log_error "Upload verification failed: $filename not found in storage"
+        return 1
+    fi
+}
+
+# Upload with verification (ensures upload succeeded)
+storage_upload_verified() {
+    local source_file="$1"
+    local destination="${2:-$(basename "$source_file")}"
+
+    # Perform upload
+    local result
+    result=$(storage_upload "$source_file" "$destination") || return 1
+
+    # Verify upload
+    if storage_verify_upload "$destination"; then
+        log_info "Upload verified successfully: $destination"
+        echo "$result"
+        return 0
+    else
+        log_error "Upload verification failed"
+        return 1
+    fi
+}
+
 # Export functions
 export -f storage_upload storage_download storage_list storage_delete
 export -f storage_upload_local storage_download_local storage_list_local storage_delete_local
@@ -548,3 +604,4 @@ export -f storage_upload_s3 storage_download_s3 storage_list_s3 storage_delete_s
 export -f storage_upload_gcs storage_download_gcs storage_list_gcs storage_delete_gcs
 export -f storage_upload_azure storage_download_azure storage_list_azure storage_delete_azure
 export -f storage_get_latest storage_apply_retention
+export -f storage_verify_upload storage_upload_verified
