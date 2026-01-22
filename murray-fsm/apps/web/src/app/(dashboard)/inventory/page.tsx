@@ -114,7 +114,7 @@ async function getInventoryData() {
 
   const lowStock = items.filter(i => i.quantity_on_hand <= i.reorder_point);
   const totalValue = items.reduce((sum, i) => sum + (i.quantity_on_hand * i.cost_cents), 0);
-  const categories = [...new Set(items.map(i => i.category))];
+  const categories = Array.from(new Set(items.map(i => i.category)));
 
   return { items, lowStock, totalValue, categories };
 }

@@ -84,23 +84,29 @@ export async function POST(request: NextRequest) {
 
     // Transform jobs for routing
     const routingJobs = (jobs || [])
-      .filter(j => j.location?.lat && j.location?.lng)
-      .map(j => ({
-        id: j.id,
-        location: {
-          id: j.location.id,
-          lat: j.location.lat,
-          lng: j.location.lng,
-          address: `${j.location.address1}, ${j.location.city}`,
-        },
-        duration: j.estimated_duration_minutes || 120,
-        timeWindow: j.scheduled_start && j.scheduled_end ? {
-          start: new Date(j.scheduled_start),
-          end: new Date(j.scheduled_end),
-        } : undefined,
-        priority: j.priority || 0,
-        assignedTo: j.assigned_to,
-      }));
+      .filter(j => {
+        const loc = Array.isArray(j.location) ? j.location[0] : j.location;
+        return loc?.lat && loc?.lng;
+      })
+      .map(j => {
+        const loc = Array.isArray(j.location) ? j.location[0] : j.location;
+        return {
+          id: j.id,
+          location: {
+            id: loc.id,
+            lat: loc.lat,
+            lng: loc.lng,
+            address: `${loc.address1}, ${loc.city}`,
+          },
+          duration: j.estimated_duration_minutes || 120,
+          timeWindow: j.scheduled_start && j.scheduled_end ? {
+            start: new Date(j.scheduled_start),
+            end: new Date(j.scheduled_end),
+          } : undefined,
+          priority: j.priority || 0,
+          assignedTo: j.assigned_to,
+        };
+      });
 
     let result;
 
@@ -225,18 +231,19 @@ export async function GET(request: NextRequest) {
     // Get latest location per technician
     const latestLocations = new Map();
     for (const loc of locations || []) {
-      if (!latestLocations.has(loc.team_member_id) && loc.team_member?.is_active) {
-        latestLocations.set(loc.team_member_id, loc);
+      const tm = Array.isArray(loc.team_member) ? loc.team_member[0] : loc.team_member;
+      if (!latestLocations.has(loc.team_member_id) && tm?.is_active) {
+        latestLocations.set(loc.team_member_id, { ...loc, team_member: tm });
       }
     }
 
-    const techsWithLocations = Array.from(latestLocations.values()).map(loc => ({
+    const techsWithLocations = Array.from(latestLocations.values()).map((loc: any) => ({
       id: loc.team_member_id,
       currentLocation: { id: loc.team_member_id, lat: loc.lat, lng: loc.lng },
       available: true,
-      name: loc.team_member.full_name,
-      phone: loc.team_member.phone,
-      color: loc.team_member.color,
+      name: loc.team_member?.full_name,
+      phone: loc.team_member?.phone,
+      color: loc.team_member?.color,
     }));
 
     const nearest = findNearestTechnician(

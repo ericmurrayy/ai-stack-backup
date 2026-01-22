@@ -303,7 +303,7 @@ export default async function IntegrationsPage() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-lg font-semibold text-slate-900">API Keys</h2>
-              <p className="text-sm text-slate-500">Manage access to the Murray's FSM API</p>
+              <p className="text-sm text-slate-500">Manage access to the Murray&apos;s FSM API</p>
             </div>
             <button className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 flex items-center gap-2">
               <Plus className="w-4 h-4" />

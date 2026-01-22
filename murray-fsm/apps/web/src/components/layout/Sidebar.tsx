@@ -61,7 +61,7 @@ export function Sidebar() {
           <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center">
             <span className="text-white font-bold text-lg">M</span>
           </div>
-          <span className="text-white font-semibold text-lg">Murray's FSM</span>
+          <span className="text-white font-semibold text-lg">Murray&apos;s FSM</span>
         </Link>
       </div>
 

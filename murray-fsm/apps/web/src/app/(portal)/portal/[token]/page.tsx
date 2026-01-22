@@ -456,7 +456,7 @@ export default async function CustomerPortalPage({
       {/* Footer */}
       <footer className="mt-12 py-6 bg-white border-t border-slate-200">
         <div className="max-w-4xl mx-auto px-6 text-center text-sm text-slate-500">
-          <p>Powered by Murray's FSM</p>
+          <p>Powered by Murray&apos;s FSM</p>
         </div>
       </footer>
     </div>

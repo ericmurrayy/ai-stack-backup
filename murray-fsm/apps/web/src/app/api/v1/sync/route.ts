@@ -129,15 +129,19 @@ export async function POST(request: NextRequest) {
         .single(),
     ]);
 
-    // Log device sync
-    await supabase.from('device_sync_log').insert({
-      owner_id: auth.ownerId,
-      device_id: deviceId,
-      sync_type: lastSyncedAt ? 'incremental' : 'full',
-      records_sent: (jobs?.length || 0) + (customers?.length || 0) + (locations?.length || 0),
-      duration_ms: Date.now() - startTime,
-      synced_at: new Date().toISOString(),
-    }).catch(() => {}); // Non-critical, don't fail if logging fails
+    // Log device sync (non-critical, don't fail if logging fails)
+    try {
+      await supabase.from('device_sync_log').insert({
+        owner_id: auth.ownerId,
+        device_id: deviceId,
+        sync_type: lastSyncedAt ? 'incremental' : 'full',
+        records_sent: (jobs?.length || 0) + (customers?.length || 0) + (locations?.length || 0),
+        duration_ms: Date.now() - startTime,
+        synced_at: new Date().toISOString(),
+      });
+    } catch {
+      // Ignore logging errors
+    }
 
     const response: SyncResponse = {
       jobs: jobs || [],

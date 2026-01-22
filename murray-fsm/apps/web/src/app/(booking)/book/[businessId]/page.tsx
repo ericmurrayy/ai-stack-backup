@@ -363,7 +363,7 @@ export default async function BookingPage({
             </div>
             <h2 className="text-xl font-semibold text-slate-900 mb-2">Booking Confirmed!</h2>
             <p className="text-slate-500 mb-6">
-              We've sent a confirmation to your email address.
+              We&apos;ve sent a confirmation to your email address.
             </p>
 
             <Card className="p-4 text-left mb-6">
@@ -423,7 +423,7 @@ export default async function BookingPage({
           <p className="mb-2">
             {business.name} • {business.phone} • {business.email}
           </p>
-          <p>Powered by Murray's FSM</p>
+          <p>Powered by Murray&apos;s FSM</p>
         </div>
       </footer>
     </div>

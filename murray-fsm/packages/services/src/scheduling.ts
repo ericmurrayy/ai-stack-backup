@@ -337,9 +337,9 @@ export function findNextAvailableSlot(
     businessHours
   );
 
-  for (const [_, slots] of slotsMap) {
-    if (slots.length > 0) {
-      return slots[0];
+  for (const entry of Array.from(slotsMap.values())) {
+    if (entry.length > 0) {
+      return entry[0];
     }
   }
 
