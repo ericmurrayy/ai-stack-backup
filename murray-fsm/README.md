@@ -50,13 +50,13 @@ git clone https://github.com/your-org/murray-fsm.git
 cd murray-fsm
 
 # Development setup (installs deps, creates .env files, starts local Supabase)
-./scripts/setup.sh --dev
+./scripts/fsm-setup.sh --dev
 
 # Run system diagnostics
-./scripts/doctor.sh --verbose
+./scripts/fsm-doctor.sh --verbose
 
 # Run smoke tests
-./scripts/smoke.sh
+./scripts/fsm-smoke.sh
 ```
 
 See [LAUNCH.md](LAUNCH.md) for the complete launch readiness checklist.

@@ -2,7 +2,7 @@
 # Murray's FSM - Top-Level Setup Script
 # ======================================
 # One-command setup for development and production environments
-# Usage: ./scripts/setup.sh [--dev|--prod] [OPTIONS]
+# Usage: ./scripts/fsm-setup.sh [--dev|--prod] [OPTIONS]
 
 set -euo pipefail
 
@@ -318,10 +318,10 @@ print_dev_next_steps() {
     echo "   ${CYAN}pnpm dev:web${NC}"
     echo ""
     echo "4. Run smoke tests:"
-    echo "   ${CYAN}./scripts/smoke.sh${NC}"
+    echo "   ${CYAN}./scripts/fsm-smoke.sh${NC}"
     echo ""
     echo "For full setup including n8n, Stripe, and Quo:"
-    echo "   See README.md or run: ${CYAN}./scripts/doctor.sh --verbose${NC}"
+    echo "   See README.md or run: ${CYAN}./scripts/fsm-doctor.sh --verbose${NC}"
     echo ""
 }
 
@@ -405,9 +405,9 @@ print_help() {
     echo "    -h, --help      Show this help"
     echo ""
     echo "Examples:"
-    echo "    ./scripts/setup.sh --dev                    # Full dev setup"
-    echo "    ./scripts/setup.sh --dev --skip-supabase    # Dev without Supabase"
-    echo "    ./scripts/setup.sh --prod                   # Validate production"
+    echo "    ./scripts/fsm-setup.sh --dev                    # Full dev setup"
+    echo "    ./scripts/fsm-setup.sh --dev --skip-supabase    # Dev without Supabase"
+    echo "    ./scripts/fsm-setup.sh --prod                   # Validate production"
 }
 
 main() {
