@@ -1,0 +1,131 @@
+# Murray's FSM - AI Development Rules
+# =====================================
+# This file configures ALL AI models in Cursor (Claude, GPT, Gemini, Grok)
+
+## Project Overview
+Murray's FSM is a field service management platform for Murray's Garage Door Services (Chelmsford, MA).
+- **Type**: pnpm monorepo
+- **Framework**: Next.js 14 App Router (web), Expo React Native (mobile)
+- **Backend**: Supabase (Postgres, Auth, Edge Functions)
+- **Styling**: Tailwind CSS
+- **State**: React Query + Zustand
+
+## Directory Structure
+```
+murray-fsm/
+├── apps/
+│   ├── web/                 # Next.js 14 dashboard
+│   │   ├── src/app/         # App Router pages
+│   │   ├── src/components/  # React components
+│   │   └── src/lib/         # Utilities
+│   └── mobile/              # Expo React Native app
+├── packages/
+│   └── services/            # Shared business logic
+│       └── src/             # Service modules
+└── supabase/                # Database migrations & functions
+```
+
+## Tech Stack & Conventions
+- **TypeScript**: Strict mode, no `any`
+- **Components**: Functional with hooks, prefer composition
+- **Imports**: Use `@/` for app paths, `@packages/services` for shared
+- **API Routes**: Next.js Route Handlers in `app/api/`
+- **Styling**: Tailwind utilities, avoid inline styles
+- **State**: Server components by default, 'use client' when needed
+
+## Code Style
+- 2-space indentation
+- Single quotes for strings
+- No semicolons (Prettier)
+- Destructure props
+- Early returns for guards
+- Async/await over .then()
+
+---
+
+# INTER-AGENT COMMUNICATION PROTOCOL
+
+You are part of a 4-model AI team. Work together efficiently.
+
+## Your Teammates
+| Model | Role | Best For |
+|-------|------|----------|
+| **Claude Opus 4.5** | Architect | Complex reasoning, system design, orchestration |
+| **GPT-5.2 Codex** | Coder | Fast code generation, refactoring, patterns |
+| **Gemini 3 Pro** | Analyst | Documentation, research, analysis |
+| **Grok Code** | Debugger | Quick fixes, debugging, fast iterations |
+
+## How to Hand Off Work
+When you need another model's expertise:
+1. Write handoff to `.cursor/agents/handoffs/to-{model}.md`
+2. Include: task, context, expected output
+3. Reference: `.cursor/agents/shared-context.json`
+
+## Handoff Format
+```markdown
+## Task: [Brief title]
+**From**: [Your model]
+**Priority**: High/Medium/Low
+**Context**: See shared-context.json
+**Request**: [What you need done]
+**Files**: [Relevant file paths]
+```
+
+## When to Hand Off
+- Complex architecture decisions → **Claude**
+- Code implementation/refactoring → **GPT**
+- Documentation/research → **Gemini**
+- Quick fixes/debugging → **Grok**
+- Blocked on something? → Ask for help!
+
+## After Completing Work
+1. Update `.cursor/agents/shared-context.json`
+2. Move handoff to `.cursor/agents/completed/`
+3. Document any decisions made
+
+## Handoff Tags (for quick reference)
+- `[HANDOFF:CLAUDE]` - Send to Claude
+- `[HANDOFF:GPT]` - Send to GPT
+- `[HANDOFF:GEMINI]` - Send to Gemini
+- `[HANDOFF:GROK]` - Send to Grok
+- `[BLOCKED:reason]` - Need help
+- `[COMPLETED:task]` - Done
+
+---
+
+## Current Task Context (Check First!)
+Before starting, read:
+- `.cursor/agents/shared-context.json` - Current project state
+- `.cursor/agents/handoffs/to-{your-model}.md` - Tasks for you
+
+---
+
+## Business Context
+- **Target Users**: Eric Murray (owner/operator), future technicians
+- **Key Features**: Job scheduling, dispatch, invoicing, customer management, call-to-job automation
+- **Offline-First**: Must work without internet
+- **Mobile**: Technicians use mobile app in field
+
+## API Integrations
+- Supabase (database, auth)
+- Stripe (payments)
+- OpenPhone/Beside (SMS/voice/webhooks)
+- Claude API (AI transcript analysis, spam detection)
+- n8n (workflow automation)
+
+## Testing
+- Vitest for unit tests
+- Playwright for E2E
+- Test files: `*.test.ts` or `*.spec.ts`
+
+## Security
+- Never expose API keys
+- Validate all inputs
+- Use RLS in Supabase
+- Sanitize user content
+
+## Current Status
+- Build: PASSING (98 pages)
+- Dashboard: 34 pages implemented
+- API Routes: 77 endpoints
+- Services: 25 business logic modules

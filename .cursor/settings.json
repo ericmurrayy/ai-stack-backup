@@ -1,0 +1,66 @@
+{
+  "rules": [
+    {
+      "name": "Always Context",
+      "description": "Read project context before responding",
+      "path": ".cursor/rules/always-context.mdc",
+      "alwaysApply": true
+    },
+    {
+      "name": "Revenue First",
+      "description": "Prioritize revenue-generating features",
+      "path": ".cursor/rules/revenue-first.mdc",
+      "alwaysApply": true
+    },
+    {
+      "name": "TypeScript Patterns",
+      "description": "Code patterns for this project",
+      "path": ".cursor/rules/typescript-patterns.mdc",
+      "alwaysApply": false,
+      "globs": ["**/*.ts", "**/*.tsx"]
+    }
+  ],
+  "subagents": [
+    {
+      "name": "architect",
+      "model": "claude-opus-4-5",
+      "description": "Architecture decisions, complex reasoning",
+      "systemPromptPath": ".cursor/agents/prompts/claude-architect.md"
+    },
+    {
+      "name": "coder",
+      "model": "gpt-5-2-codex",
+      "description": "Code generation, implementation",
+      "systemPromptPath": ".cursor/agents/prompts/gpt-coder.md"
+    },
+    {
+      "name": "docs",
+      "model": "gemini-3-pro",
+      "description": "Documentation, research",
+      "systemPromptPath": ".cursor/agents/prompts/gemini-docs.md"
+    },
+    {
+      "name": "debug",
+      "model": "grok-code",
+      "description": "Quick fixes, debugging, tests",
+      "systemPromptPath": ".cursor/agents/prompts/grok-debug.md"
+    }
+  ],
+  "commands": [
+    {
+      "name": "status",
+      "description": "Show current project status",
+      "action": "read .cursor/agents/shared-context.json and summarize"
+    },
+    {
+      "name": "handoff-gpt",
+      "description": "Create handoff to GPT for implementation",
+      "action": "append task to .cursor/agents/handoffs/to-gpt.md"
+    },
+    {
+      "name": "handoff-claude",
+      "description": "Create handoff to Claude for architecture",
+      "action": "append task to .cursor/agents/handoffs/to-claude.md"
+    }
+  ]
+}

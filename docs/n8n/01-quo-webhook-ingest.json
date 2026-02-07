@@ -1,0 +1,451 @@
+{
+  "name": "01 - Quo Webhook Ingest",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "quo-webhook",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Quo Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "quo-webhook-ingest"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Verify Quo/OpenPhone HMAC signature\nconst crypto = require('crypto');\n\nconst signature = $input.first().headers['openphone-signature'];\nconst payload = JSON.stringify($input.first().body);\nconst secret = $env.QUO_WEBHOOK_SIGNING_SECRET_BASE64;\n\nif (!signature || !secret) {\n  throw new Error('Missing signature or secret');\n}\n\n// Parse signature: hmac;1;<timestamp>;<base64_digest>\nconst parts = signature.split(';');\nif (parts.length !== 4 || parts[0] !== 'hmac' || parts[1] !== '1') {\n  throw new Error('Invalid signature format');\n}\n\nconst timestamp = parts[2];\nconst receivedDigest = parts[3];\n\n// Check timestamp (30 minute tolerance)\nconst timestampMs = parseInt(timestamp);\nconst now = Date.now();\nif (Math.abs(now - timestampMs) > 30 * 60 * 1000) {\n  throw new Error('Timestamp too old');\n}\n\n// Compute expected digest\nconst signedData = timestamp + '.' + payload;\nconst keyBuffer = Buffer.from(secret, 'base64');\nconst expectedDigest = crypto\n  .createHmac('sha256', keyBuffer)\n  .update(signedData)\n  .digest('base64');\n\nif (receivedDigest !== expectedDigest) {\n  throw new Error('Signature mismatch');\n}\n\n// Return verified payload\nreturn [{\n  json: {\n    verified: true,\n    event: $input.first().body,\n    timestamp: timestamp\n  }\n}];"
+      },
+      "id": "verify-signature",
+      "name": "Verify HMAC Signature",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "schema": "public",
+        "table": "automation_events",
+        "filterType": "string",
+        "filterString": "idempotency_key=eq.{{ $json.event.id }}"
+      },
+      "id": "check-idempotency",
+      "name": "Check Idempotency",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [680, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-creds",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "already-processed",
+              "leftValue": "={{ $json.length }}",
+              "rightValue": "0",
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "is-new-event",
+      "name": "Is New Event?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": "public",
+        "table": "automation_events",
+        "columns": "owner_id,source,event_type,idempotency_key,payload",
+        "options": {}
+      },
+      "id": "insert-automation-event",
+      "name": "Record Event",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1120, 200],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-creds",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Verify HMAC Signature').item.json.event.type }}",
+                    "rightValue": "message.received",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "message_received"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Verify HMAC Signature').item.json.event.type }}",
+                    "rightValue": "call.completed",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "call_completed"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Verify HMAC Signature').item.json.event.type }}",
+                    "rightValue": "call.transcript.completed",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "transcript_completed"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "route-by-event-type",
+      "name": "Route by Event Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract or create comm_thread for message\nconst event = $('Verify HMAC Signature').item.json.event;\nconst data = event.data;\n\nconst contactPhone = data.direction === 'incoming' \n  ? data.from \n  : data.to[0];\n\nreturn [{\n  json: {\n    contact_phone: contactPhone,\n    external_phone_number_id: data.phoneNumberId,\n    direction: data.direction === 'incoming' ? 'inbound' : 'outbound',\n    message: {\n      external_message_id: data.id,\n      from_phone: data.from,\n      to_phone: data.to[0],\n      body: data.body,\n      media: data.media || [],\n      status: data.status,\n      sent_at: data.createdAt,\n      received_at: data.direction === 'incoming' ? data.createdAt : null\n    },\n    raw_event: event\n  }\n}];"
+      },
+      "id": "process-message",
+      "name": "Process Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 100]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract call data\nconst event = $('Verify HMAC Signature').item.json.event;\nconst data = event.data;\n\nconst contactPhone = data.direction === 'incoming' \n  ? data.from \n  : data.to;\n\nreturn [{\n  json: {\n    contact_phone: contactPhone,\n    external_phone_number_id: data.phoneNumberId,\n    direction: data.direction === 'incoming' ? 'inbound' : 'outbound',\n    call: {\n      external_call_id: data.id,\n      from_phone: data.from,\n      to_phone: data.to,\n      started_at: data.createdAt,\n      ended_at: data.completedAt,\n      answered_at: data.answeredAt,\n      duration_seconds: data.duration,\n      recording_url: data.recording?.url || null\n    },\n    raw_event: event\n  }\n}];"
+      },
+      "id": "process-call",
+      "name": "Process Call",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 250]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Update call with transcript\nconst event = $('Verify HMAC Signature').item.json.event;\nconst data = event.data;\n\nreturn [{\n  json: {\n    external_call_id: data.callId,\n    transcript: data.transcript,\n    summary: data.summary || null,\n    action_items: data.actionItems || []\n  }\n}];"
+      },
+      "id": "process-transcript",
+      "name": "Process Transcript",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "anthropicApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-3-haiku-20240307\",\n  \"max_tokens\": 1024,\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Extract structured information from this customer communication for a garage door service company.\\n\\nCommunication: {{ $json.message ? $json.message.body : $json.transcript }}\\n\\nRespond with valid JSON only:\\n{\\n  \\\"intent\\\": \\\"schedule|reschedule|cancel|quote|emergency|general\\\",\\n  \\\"customer\\\": {\\n    \\\"name\\\": \\\"...\\\",\\n    \\\"phone\\\": \\\"...\\\",\\n    \\\"email\\\": \\\"...\\\"\\n  },\\n  \\\"location\\\": {\\n    \\\"address1\\\": \\\"...\\\",\\n    \\\"city\\\": \\\"...\\\",\\n    \\\"state\\\": \\\"...\\\",\\n    \\\"postal_code\\\": \\\"...\\\"\\n  },\\n  \\\"issue\\\": {\\n    \\\"service_type\\\": \\\"...\\\",\\n    \\\"problem_description\\\": \\\"...\\\",\\n    \\\"urgency\\\": \\\"low|medium|high\\\"\\n  },\\n  \\\"time\\\": {\\n    \\\"preferred_start\\\": \\\"ISO datetime or null\\\",\\n    \\\"preferred_end\\\": \\\"ISO datetime or null\\\",\\n    \\\"confidence\\\": 0.0-1.0\\n  },\\n  \\\"next_step\\\": \\\"create_job|create_estimate|request_more_info|no_action\\\",\\n  \\\"missing_fields\\\": [\\\"...\\\"],\\n  \\\"notes\\\": \\\"...\\\"\\n}\\n\\nOmit fields you cannot determine. Use null for unknown values.\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "extract-intent",
+      "name": "Extract Intent (LLM)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1780, 200],
+      "credentials": {
+        "anthropicApi": {
+          "id": "anthropic-creds",
+          "name": "Anthropic"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse LLM response and create action queue items\nconst extraction = JSON.parse($json.content[0].text);\nconst sourceData = $('Process Message').item?.json || $('Process Transcript').item?.json;\n\nconst actions = [];\n\n// Create action based on intent\nif (extraction.next_step === 'create_job' || extraction.intent === 'schedule') {\n  actions.push({\n    source_type: sourceData.message ? 'message' : 'call',\n    source_id: sourceData.message?.external_message_id || sourceData.external_call_id,\n    kind: 'create_job',\n    payload: {\n      title: `Service Request - ${extraction.issue?.service_type || 'General'}`,\n      customer: extraction.customer,\n      location: extraction.location,\n      service_type: extraction.issue?.service_type,\n      problem_description: extraction.issue?.problem_description,\n      scheduled_start: extraction.time?.preferred_start,\n      scheduled_end: extraction.time?.preferred_end,\n      time_confidence: extraction.time?.confidence\n    },\n    requires_approval: true,\n    status: 'pending'\n  });\n}\n\nif (extraction.intent === 'schedule' && extraction.time?.confidence >= 0.85) {\n  actions.push({\n    source_type: sourceData.message ? 'message' : 'call',\n    source_id: sourceData.message?.external_message_id || sourceData.external_call_id,\n    kind: 'schedule_job',\n    payload: {\n      scheduled_start: extraction.time.preferred_start,\n      scheduled_end: extraction.time.preferred_end,\n      customer: extraction.customer,\n      location: extraction.location\n    },\n    requires_approval: true,\n    status: 'pending'\n  });\n}\n\nif (extraction.intent === 'quote' || extraction.next_step === 'create_estimate') {\n  actions.push({\n    source_type: sourceData.message ? 'message' : 'call',\n    source_id: sourceData.message?.external_message_id || sourceData.external_call_id,\n    kind: 'create_estimate',\n    payload: {\n      service_type: extraction.issue?.service_type,\n      problem_description: extraction.issue?.problem_description,\n      customer: extraction.customer,\n      location: extraction.location\n    },\n    requires_approval: true,\n    status: 'pending'\n  });\n}\n\nreturn actions.map(action => ({ json: { ...action, ai_extraction: extraction } }));"
+      },
+      "id": "create-actions",
+      "name": "Create Action Queue Items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2000, 200]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": "public",
+        "table": "action_queue",
+        "columns": "owner_id,source_type,source_id,kind,payload,requires_approval,status",
+        "options": {}
+      },
+      "id": "insert-action-queue",
+      "name": "Insert Action Queue",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [2220, 200],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-creds",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, event_id: $('Verify HMAC Signature').item.json.event.id } }}"
+      },
+      "id": "respond-success",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2440, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, message: 'Already processed' } }}"
+      },
+      "id": "respond-duplicate",
+      "name": "Respond Duplicate",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1120, 400]
+    }
+  ],
+  "connections": {
+    "Quo Webhook": {
+      "main": [
+        [
+          {
+            "node": "Verify HMAC Signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify HMAC Signature": {
+      "main": [
+        [
+          {
+            "node": "Check Idempotency",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Idempotency": {
+      "main": [
+        [
+          {
+            "node": "Is New Event?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is New Event?": {
+      "main": [
+        [
+          {
+            "node": "Record Event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Duplicate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Event": {
+      "main": [
+        [
+          {
+            "node": "Route by Event Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Event Type": {
+      "main": [
+        [
+          {
+            "node": "Process Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process Call",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process Transcript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Message": {
+      "main": [
+        [
+          {
+            "node": "Extract Intent (LLM)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Transcript": {
+      "main": [
+        [
+          {
+            "node": "Extract Intent (LLM)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Intent (LLM)": {
+      "main": [
+        [
+          {
+            "node": "Create Action Queue Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Action Queue Items": {
+      "main": [
+        [
+          {
+            "node": "Insert Action Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Action Queue": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "Murray FSM",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}

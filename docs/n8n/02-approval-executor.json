@@ -1,0 +1,479 @@
+{
+  "name": "02 - Approval Executor",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "approval-executor",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Approval Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "approval-executor"
+    },
+    {
+      "parameters": {
+        "operation": "select",
+        "schema": "public",
+        "table": "action_queue",
+        "filterType": "string",
+        "filterString": "id=eq.{{ $json.action_queue_id }}"
+      },
+      "id": "fetch-action",
+      "name": "Fetch Action",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [460, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-creds",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.kind }}",
+                    "rightValue": "create_job",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "create_job"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.kind }}",
+                    "rightValue": "schedule_job",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "schedule_job"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.kind }}",
+                    "rightValue": "send_estimate",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "send_estimate"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.kind }}",
+                    "rightValue": "send_sms",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "send_sms"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "route-by-kind",
+      "name": "Route by Kind",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Create or update customer, location, and job\nconst action = $input.first().json;\nconst payload = action.payload;\nconst ownerId = $env.SUPABASE_OWNER_ID;\n\n// Prepare customer data\nconst customerData = {\n  owner_id: ownerId,\n  name: payload.customer?.name || 'Unknown Customer',\n  phone: payload.customer?.phone,\n  email: payload.customer?.email\n};\n\n// Prepare location data\nconst locationData = payload.location ? {\n  owner_id: ownerId,\n  address1: payload.location.address1,\n  city: payload.location.city,\n  state: payload.location.state,\n  postal_code: payload.location.postal_code\n} : null;\n\n// Prepare job data\nconst jobData = {\n  owner_id: ownerId,\n  title: payload.title || 'New Service Request',\n  service_type: payload.service_type,\n  problem_description: payload.problem_description,\n  scheduled_start: payload.scheduled_start,\n  scheduled_end: payload.scheduled_end,\n  status: 'scheduled'\n};\n\nreturn [{\n  json: {\n    action_id: action.id,\n    customer: customerData,\n    location: locationData,\n    job: jobData\n  }\n}];"
+      },
+      "id": "prepare-job-data",
+      "name": "Prepare Job Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 100]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "schema": "public",
+        "table": "customers",
+        "columns": "owner_id,name,phone,email",
+        "conflictColumns": "phone",
+        "options": {}
+      },
+      "id": "upsert-customer",
+      "name": "Upsert Customer",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1120, 100],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-creds",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": "public",
+        "table": "jobs",
+        "columns": "owner_id,customer_id,title,service_type,problem_description,scheduled_start,scheduled_end,status",
+        "options": {}
+      },
+      "id": "insert-job",
+      "name": "Insert Job",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1340, 100],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-creds",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare schedule update\nconst action = $input.first().json;\nconst payload = action.payload;\n\nreturn [{\n  json: {\n    action_id: action.id,\n    job_id: payload.job_id,\n    scheduled_start: payload.scheduled_start,\n    scheduled_end: payload.scheduled_end\n  }\n}];"
+      },
+      "id": "prepare-schedule",
+      "name": "Prepare Schedule",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 250]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": "public",
+        "table": "jobs",
+        "filterType": "string",
+        "filterString": "id=eq.{{ $json.job_id }}",
+        "columns": "scheduled_start,scheduled_end"
+      },
+      "id": "update-job-schedule",
+      "name": "Update Schedule",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1120, 250],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-creds",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "event",
+        "calendar": "={{ $env.GOOGLE_CALENDAR_ID }}",
+        "start": "={{ $json.scheduled_start }}",
+        "end": "={{ $json.scheduled_end }}",
+        "additionalFields": {
+          "summary": "={{ 'Job: ' + ($json.job_title || 'Service') }}",
+          "description": "={{ $json.problem_description || '' }}"
+        }
+      },
+      "id": "create-google-event",
+      "name": "Create Google Calendar Event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.1,
+      "position": [1340, 250],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "google-calendar-creds",
+          "name": "Google Calendar"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "schema": "public",
+        "table": "calendar_events",
+        "columns": "owner_id,job_id,provider,external_event_id,calendar_id,status",
+        "options": {}
+      },
+      "id": "insert-calendar-event",
+      "name": "Record Calendar Event",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1560, 250],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-creds",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openphone.com/v1/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"from\": \"{{ $env.QUO_PHONE_NUMBER_ID }}\",\n  \"to\": [\"{{ $json.to_phone }}\"],\n  \"body\": \"{{ $json.message }}\"\n}",
+        "options": {}
+      },
+      "id": "send-sms-quo",
+      "name": "Send SMS via Quo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 500],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "quo-api-creds",
+          "name": "Quo API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "schema": "public",
+        "table": "action_queue",
+        "filterType": "string",
+        "filterString": "id=eq.{{ $json.action_id }}",
+        "columns": "status,executed_at",
+        "updateFields": {
+          "status": "executed",
+          "executed_at": "={{ $now.toISO() }}"
+        }
+      },
+      "id": "mark-executed",
+      "name": "Mark Executed",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1780, 300],
+      "credentials": {
+        "supabaseApi": {
+          "id": "supabase-creds",
+          "name": "Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, action_id: $json.action_id, status: 'executed' } }}"
+      },
+      "id": "respond-success",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2000, 300]
+    }
+  ],
+  "connections": {
+    "Approval Webhook": {
+      "main": [
+        [
+          {
+            "node": "Fetch Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Action": {
+      "main": [
+        [
+          {
+            "node": "Route by Kind",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Kind": {
+      "main": [
+        [
+          {
+            "node": "Prepare Job Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Schedule",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [],
+        [
+          {
+            "node": "Send SMS via Quo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Job Data": {
+      "main": [
+        [
+          {
+            "node": "Upsert Customer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Customer": {
+      "main": [
+        [
+          {
+            "node": "Insert Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Job": {
+      "main": [
+        [
+          {
+            "node": "Mark Executed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Schedule": {
+      "main": [
+        [
+          {
+            "node": "Update Schedule",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Schedule": {
+      "main": [
+        [
+          {
+            "node": "Create Google Calendar Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Google Calendar Event": {
+      "main": [
+        [
+          {
+            "node": "Record Calendar Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Calendar Event": {
+      "main": [
+        [
+          {
+            "node": "Mark Executed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send SMS via Quo": {
+      "main": [
+        [
+          {
+            "node": "Mark Executed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Executed": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "Murray FSM",
+      "createdAt": "2024-01-01T00:00:00.000Z"
+    }
+  ]
+}

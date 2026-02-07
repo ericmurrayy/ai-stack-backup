@@ -1,0 +1,27 @@
+---
+description: Prioritize revenue-generating features
+globs:
+alwaysApply: true
+---
+
+# Revenue-First Development
+
+When suggesting or implementing features, prioritize by revenue impact:
+
+## High Priority (implement first)
+1. **Phone AI** - Answer calls → book jobs → $$$
+2. **Auto-invoicing** - Complete job → send invoice → get paid
+3. **Review requests** - Finished job → request review → more customers
+4. **Quote automation** - Inquiry → instant quote → conversion
+
+## Medium Priority
+5. Job scheduling
+6. Customer portal
+7. Inventory tracking
+
+## Low Priority
+8. Mobile app
+9. GPS tracking
+10. Advanced analytics
+
+**Rule**: Every feature should help Murray make money. If it doesn't, deprioritize it.

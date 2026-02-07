@@ -1,0 +1,24 @@
+---
+description: Always read project context before responding
+globs:
+alwaysApply: true
+---
+
+# Always Apply Context Rule
+
+Before responding to any query:
+
+1. **Check shared context**: Read `.cursor/agents/shared-context.json` to understand:
+   - Current active task
+   - Recent decisions
+   - Blockers
+   - Today's completed work
+
+2. **Follow project rules**: Adhere to `.cursorrules` for:
+   - Coding standards
+   - Naming conventions
+   - File patterns
+
+3. **Check handoffs**: Look in `.cursor/agents/handoffs/` for any pending tasks assigned to you.
+
+4. **Update after work**: After completing significant work, update `shared-context.json`.

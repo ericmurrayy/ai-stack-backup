@@ -1,0 +1,130 @@
+{
+  "project": "murray-fsm",
+  "version": "3.1.0",
+  "lastUpdated": "2026-02-06T20:30:00Z",
+
+  "activeTask": {
+    "description": "Build world-class FSM/CRM with AI integration",
+    "assignedTo": "opus-4.6",
+    "priority": "critical",
+    "status": "in_progress"
+  },
+
+  "recentDecisions": [
+    {
+      "date": "2026-02-06",
+      "decision": "Multi-provider AI engine (Anthropic, OpenAI, Ollama) - user selects model",
+      "madeBy": "opus-4.6",
+      "reasoning": "No vendor lock-in, free option with Ollama, best quality with Claude/GPT"
+    },
+    {
+      "date": "2026-02-06",
+      "decision": "Fixed ALL critical security vulnerabilities before production push",
+      "madeBy": "opus-4.6",
+      "reasoning": "Middleware bypassed all API auth, command injection, path traversal - all fixed"
+    },
+    {
+      "date": "2026-02-06",
+      "decision": "Phone pipeline is the #1 revenue feature - call → AI → job → invoice",
+      "madeBy": "opus-4.6",
+      "reasoning": "Every inbound call should convert to a job. This is where money comes from."
+    }
+  ],
+
+  "completedToday": [
+    "Fixed middleware /api bypass (CRITICAL security fix)",
+    "Created API auth utility (session, bearer, API key)",
+    "Fixed command injection in jarvis-bridge.ts (execFile, sanitizeFilename)",
+    "Fixed path traversal in jarvis-bridge.ts memory functions",
+    "Disabled test-env route in production",
+    "Fixed timezone America/Chicago -> America/New_York",
+    "Built universal AI engine (4 providers: Anthropic, OpenAI, Ollama, custom)",
+    "Built phone pipeline service (call-to-job automation)",
+    "Created AI providers API endpoint",
+    "Enhanced Vercel deployment config (crons, security headers, function timeouts)",
+    "Created desktop shortcut (Murray's FSM.lnk)",
+    "Verified build passes (101 pages, 0 errors)",
+    "Updated inter-agent coordination handoffs"
+  ],
+
+  "buildStatus": {
+    "status": "PASSING",
+    "pages": 101,
+    "apiRoutes": 80,
+    "serviceModules": 27,
+    "lastBuild": "2026-02-06T20:25:00Z",
+    "warnings": 2,
+    "errors": 0
+  },
+
+  "securityStatus": {
+    "criticalFixed": 6,
+    "highFixed": 0,
+    "remaining": [
+      "Add Zod validation to all API POST bodies",
+      "Fix sync endpoint field allowlisting",
+      "Add SSRF protection to webhook URLs",
+      "Standardize error responses (no internal leaks)",
+      "Add structured logging",
+      "Consolidate phone normalization (3 implementations)"
+    ]
+  },
+
+  "newFiles": {
+    "services": [
+      "packages/services/src/ai-engine.ts",
+      "packages/services/src/phone-pipeline.ts"
+    ],
+    "apiRoutes": [
+      "apps/web/src/app/api/ai/providers/route.ts"
+    ],
+    "utilities": [
+      "apps/web/src/lib/auth.ts"
+    ],
+    "deployment": [
+      "start-murray-fsm.bat"
+    ]
+  },
+
+  "keyMetrics": {
+    "totalPages": 101,
+    "apiRoutes": 80,
+    "serviceModules": 27,
+    "securityVulnsFixed": 6,
+    "aiProviders": 4,
+    "buildTime": "~40s"
+  },
+
+  "nextSteps": [
+    {
+      "id": "git-init",
+      "title": "Initialize git repo and push to GitHub",
+      "priority": "high",
+      "suggestedModel": "user"
+    },
+    {
+      "id": "vercel-deploy",
+      "title": "Deploy to Vercel with environment variables",
+      "priority": "high",
+      "suggestedModel": "user"
+    },
+    {
+      "id": "supabase-validate",
+      "title": "Validate Supabase connection and run migrations",
+      "priority": "high",
+      "suggestedModel": "user"
+    },
+    {
+      "id": "zod-validation",
+      "title": "Add Zod validation to all API POST bodies",
+      "priority": "medium",
+      "suggestedModel": "gpt"
+    },
+    {
+      "id": "e2e-tests",
+      "title": "Write E2E tests with Playwright",
+      "priority": "medium",
+      "suggestedModel": "grok"
+    }
+  ]
+}

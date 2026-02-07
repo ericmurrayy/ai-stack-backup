@@ -1,0 +1,153 @@
+# Murray's Revenue-First Swarm Configuration
+# ==========================================
+# 4 specialized agents working together on money-making features
+
+name: murray-revenue-swarm
+description: Multi-model swarm for FSM revenue features
+version: 1.0.0
+
+# Orchestration mode
+mode: collaborative
+max_concurrent_agents: 4
+
+# Agent Definitions
+agents:
+  # Claude Opus - Architecture & Complex Reasoning
+  - id: architect
+    name: Claude Architect
+    role: architect
+    model: claude-opus-4-5
+    capabilities:
+      - system_design
+      - architecture_decisions
+      - complex_refactoring
+      - database_schema
+      - security_review
+    prompt_file: .cursor/agents/prompts/claude-architect.md
+    priority: high
+
+  # GPT Codex - Code Implementation
+  - id: coder
+    name: GPT Coder
+    role: developer
+    model: gpt-5-2-codex
+    capabilities:
+      - feature_implementation
+      - api_routes
+      - component_creation
+      - code_refactoring
+      - pattern_application
+    prompt_file: .cursor/agents/prompts/gpt-coder.md
+    priority: high
+
+  # Gemini Pro - Documentation & Research
+  - id: docs
+    name: Gemini Docs
+    role: documentation
+    model: gemini-3-pro
+    capabilities:
+      - api_documentation
+      - readme_updates
+      - library_research
+      - requirements_analysis
+      - user_guides
+    prompt_file: .cursor/agents/prompts/gemini-docs.md
+    priority: medium
+
+  # Grok - Quick Fixes & Testing
+  - id: debug
+    name: Grok Debug
+    role: qa
+    model: grok-code
+    capabilities:
+      - bug_fixes
+      - unit_tests
+      - type_fixes
+      - quick_iterations
+      - debugging
+    prompt_file: .cursor/agents/prompts/grok-debug.md
+    priority: medium
+
+# Task Queue - Revenue Priority
+tasks:
+  - id: retell-phone-ai
+    name: Implement Retell AI Phone Answering
+    description: |
+      Add phone AI capability so Murray can auto-answer business calls,
+      book jobs, and handle customer inquiries 24/7.
+    priority: critical
+    assigned_to: coder
+    dependencies: []
+    deliverables:
+      - packages/services/src/retell.ts
+      - apps/web/src/app/api/phone/route.ts
+      - apps/web/src/app/api/phone/webhook/route.ts
+      - supabase/migrations/ai_calls.sql
+
+  - id: invoice-automation
+    name: Auto-Generate and Send Invoices
+    description: |
+      Automatically generate and send invoices when jobs are marked complete.
+      Include payment links via Stripe.
+    priority: critical
+    assigned_to: coder
+    dependencies: []
+    deliverables:
+      - packages/services/src/invoicing.ts
+      - apps/web/src/app/api/invoices/route.ts
+      - apps/web/src/app/api/invoices/send/route.ts
+
+  - id: review-requests
+    name: Auto-Request Google Reviews
+    description: |
+      Send review request messages via WhatsApp/SMS after completed jobs.
+      Track review status and follow up.
+    priority: high
+    assigned_to: debug
+    dependencies: []
+    deliverables:
+      - packages/services/src/reviews.ts
+      - apps/web/src/app/api/reviews/request/route.ts
+
+  - id: document-apis
+    name: Document All New APIs
+    description: Document the Retell, Invoice, and Review APIs
+    priority: medium
+    assigned_to: docs
+    dependencies:
+      - retell-phone-ai
+      - invoice-automation
+      - review-requests
+    deliverables:
+      - docs/API.md
+      - docs/PHONE_AI.md
+      - docs/INVOICING.md
+
+# Communication Rules
+communication:
+  shared_context: .cursor/agents/shared-context.json
+  handoff_dir: .cursor/agents/handoffs/
+  completed_dir: .cursor/agents/completed/
+
+  handoff_rules:
+    - from: architect
+      to: coder
+      trigger: architecture_complete
+    - from: coder
+      to: docs
+      trigger: implementation_complete
+    - from: coder
+      to: debug
+      trigger: needs_tests
+    - from: debug
+      to: coder
+      trigger: bug_found
+
+# Cost Optimization
+cost_limits:
+  max_daily_spend: 5.00
+  model_budgets:
+    claude-opus-4-5: 2.00
+    gpt-5-2-codex: 2.00
+    gemini-3-pro: 0.50
+    grok-code: 0.50

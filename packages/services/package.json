@@ -1,0 +1,21 @@
+{
+  "name": "@murray-fsm/services",
+  "version": "1.0.0",
+  "description": "Services for Murray's FSM - PDF generation, email, scheduling",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@murray-fsm/shared": "workspace:*",
+    "date-fns": "^3.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.4.0"
+  },
+  "peerDependencies": {
+    "@supabase/supabase-js": "^2.43.0"
+  }
+}
