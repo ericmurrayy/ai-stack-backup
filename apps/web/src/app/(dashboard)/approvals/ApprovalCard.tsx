@@ -124,7 +124,7 @@ export function ApprovalCard({ action }: ApprovalCardProps) {
               </button>
             )}
 
-            <ApprovalActions actionId={action.id} />
+            <ApprovalActions actionId={action.id} payload={action.payload} kind={action.kind} />
           </div>
         </div>
       </div>

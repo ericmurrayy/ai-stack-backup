@@ -1,30 +1,36 @@
 // Murray's FSM - Single Job API v1
 // =================================
+// Standardized request/response contracts with Zod validation.
 
-import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { NextRequest } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { hasScope } from '@murray-fsm/services';
+import { JobUpdateSchema } from '@murray-fsm/shared';
+import { createClient } from '@/lib/supabase/server';
+import {
+  apiSuccess,
+  apiUnauthorized,
+  apiForbidden,
+  apiNotFound,
+  apiValidationError,
+  apiInternalError,
+  generateRequestId,
+} from '@/lib/api-response';
 
 // GET /api/v1/jobs/:jobId - Get job details
 export async function GET(
   request: NextRequest,
   { params }: { params: { jobId: string } }
 ) {
+  const requestId = generateRequestId();
   const auth = await authenticateApiRequest(request);
 
   if (!auth.authenticated) {
-    return NextResponse.json(
-      { error: auth.error, code: 'UNAUTHORIZED' },
-      { status: auth.statusCode || 401 }
-    );
+    return apiUnauthorized(auth.error || 'Unauthorized', requestId);
   }
 
   if (!hasScope(auth.scopes!, 'read:jobs')) {
-    return NextResponse.json(
-      { error: 'Insufficient permissions', code: 'FORBIDDEN' },
-      { status: 403 }
-    );
+    return apiForbidden('Insufficient permissions — requires read:jobs', requestId);
   }
 
   try {
@@ -38,7 +44,7 @@ export async function GET(
         location:locations(*),
         assigned:team_members(id, full_name, phone, email, color),
         line_items:line_items(*),
-        photos:job_photos(id, url, caption, taken_at)
+        photos:job_photos(id, kind, storage_path, caption, captured_at)
       `)
       .eq('id', params.jobId)
       .eq('owner_id', auth.ownerId)
@@ -46,22 +52,12 @@ export async function GET(
       .single();
 
     if (error || !job) {
-      return NextResponse.json(
-        { error: 'Job not found', code: 'NOT_FOUND' },
-        { status: 404 }
-      );
+      return apiNotFound('Job not found', requestId);
     }
 
-    return NextResponse.json({
-      success: true,
-      data: { job },
-    });
+    return apiSuccess({ job }, undefined, 200, requestId);
   } catch (error) {
-    console.error('Get job error:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch job', code: 'INTERNAL_ERROR' },
-      { status: 500 }
-    );
+    return apiInternalError(error, 'Jobs:GET/:id', requestId);
   }
 }
 
@@ -70,27 +66,29 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: { jobId: string } }
 ) {
+  const requestId = generateRequestId();
   const auth = await authenticateApiRequest(request);
 
   if (!auth.authenticated) {
-    return NextResponse.json(
-      { error: auth.error, code: 'UNAUTHORIZED' },
-      { status: auth.statusCode || 401 }
-    );
+    return apiUnauthorized(auth.error || 'Unauthorized', requestId);
   }
 
   if (!hasScope(auth.scopes!, 'write:jobs')) {
-    return NextResponse.json(
-      { error: 'Insufficient permissions', code: 'FORBIDDEN' },
-      { status: 403 }
-    );
+    return apiForbidden('Insufficient permissions — requires write:jobs', requestId);
   }
 
   try {
     const supabase = await createClient();
     const body = await request.json();
 
-    // Build update object (only include fields that were provided)
+    // Validate with Zod
+    const parsed = JobUpdateSchema.safeParse(body);
+    if (!parsed.success) {
+      return apiValidationError(parsed.error, requestId);
+    }
+
+    // Build update from validated data — only include fields that were provided
+    const validated = parsed.data;
     const updates: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
     };
@@ -98,12 +96,12 @@ export async function PATCH(
     const allowedFields = [
       'title', 'status', 'service_type', 'scheduled_start', 'scheduled_end',
       'assigned_to', 'internal_notes', 'priority', 'estimated_duration_minutes',
-      'actual_duration_minutes', 'customer_rating', 'customer_feedback'
-    ];
+      'actual_duration_minutes', 'customer_rating', 'customer_feedback',
+    ] as const;
 
     for (const field of allowedFields) {
-      if (body[field] !== undefined) {
-        updates[field] = body[field];
+      if ((validated as any)[field] !== undefined) {
+        updates[field] = (validated as any)[field];
       }
     }
 
@@ -116,23 +114,13 @@ export async function PATCH(
       .select()
       .single();
 
-    if (error) {
-      return NextResponse.json(
-        { error: 'Job not found', code: 'NOT_FOUND' },
-        { status: 404 }
-      );
+    if (error || !job) {
+      return apiNotFound('Job not found', requestId);
     }
 
-    return NextResponse.json({
-      success: true,
-      data: { job },
-    });
+    return apiSuccess({ job }, undefined, 200, requestId);
   } catch (error) {
-    console.error('Update job error:', error);
-    return NextResponse.json(
-      { error: 'Failed to update job', code: 'INTERNAL_ERROR' },
-      { status: 500 }
-    );
+    return apiInternalError(error, 'Jobs:PATCH/:id', requestId);
   }
 }
 
@@ -141,20 +129,15 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: { jobId: string } }
 ) {
+  const requestId = generateRequestId();
   const auth = await authenticateApiRequest(request);
 
   if (!auth.authenticated) {
-    return NextResponse.json(
-      { error: auth.error, code: 'UNAUTHORIZED' },
-      { status: auth.statusCode || 401 }
-    );
+    return apiUnauthorized(auth.error || 'Unauthorized', requestId);
   }
 
   if (!hasScope(auth.scopes!, 'write:jobs')) {
-    return NextResponse.json(
-      { error: 'Insufficient permissions', code: 'FORBIDDEN' },
-      { status: 403 }
-    );
+    return apiForbidden('Insufficient permissions — requires write:jobs', requestId);
   }
 
   try {
@@ -168,15 +151,8 @@ export async function DELETE(
 
     if (error) throw error;
 
-    return NextResponse.json({
-      success: true,
-      message: 'Job deleted',
-    });
+    return apiSuccess({ deleted: true }, undefined, 200, requestId);
   } catch (error) {
-    console.error('Delete job error:', error);
-    return NextResponse.json(
-      { error: 'Failed to delete job', code: 'INTERNAL_ERROR' },
-      { status: 500 }
-    );
+    return apiInternalError(error, 'Jobs:DELETE/:id', requestId);
   }
 }
