@@ -164,7 +164,11 @@ export default async function ApprovalsPage() {
                       </div>
                     </div>
 
-                    <ApprovalActions actionId={action.id} />
+                    <ApprovalActions
+                      actionId={action.id}
+                      payload={action.payload as Record<string, unknown>}
+                      kind={action.kind}
+                    />
                   </div>
                 </div>
               );

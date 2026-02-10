@@ -14,13 +14,11 @@ export async function POST(request: Request) {
 
     const supabase = createClient();
 
-    // Get current user
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Update action status to rejected
     const { data, error } = await supabase
       .from('action_queue')
       .update({
@@ -41,6 +39,16 @@ export async function POST(request: Request) {
     if (!data) {
       return NextResponse.json({ error: 'Action not found or already processed' }, { status: 404 });
     }
+
+    // Write audit log
+    await supabase.from('audit_log').insert({
+      owner_id: user.id,
+      actor: user.id,
+      action: 'reject',
+      entity_type: 'action',
+      entity_id: actionId,
+      diff: { reason: reason || 'Rejected by user' },
+    });
 
     return NextResponse.json({ success: true, action: data });
   } catch (error) {
