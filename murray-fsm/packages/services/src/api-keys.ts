@@ -17,6 +17,8 @@ export type ApiKeyScope =
   | 'write:invoices'
   | 'read:estimates'
   | 'write:estimates'
+  | 'read:leads'
+  | 'write:leads'
   | 'read:team'
   | 'write:team'
   | 'read:analytics'
@@ -104,6 +106,8 @@ export const API_SCOPE_DESCRIPTIONS: Record<ApiKeyScope, string> = {
   'write:invoices': 'Create and modify invoices',
   'read:estimates': 'View estimates',
   'write:estimates': 'Create and modify estimates',
+  'read:leads': 'View leads and pipeline',
+  'write:leads': 'Create and modify leads',
   'read:team': 'View team members',
   'write:team': 'Manage team members',
   'read:analytics': 'View analytics and reports',
@@ -116,6 +120,7 @@ export const SCOPE_CATEGORIES = {
   Jobs: ['read:jobs', 'write:jobs'] as ApiKeyScope[],
   Customers: ['read:customers', 'write:customers'] as ApiKeyScope[],
   Financial: ['read:invoices', 'write:invoices', 'read:estimates', 'write:estimates'] as ApiKeyScope[],
+  Leads: ['read:leads', 'write:leads'] as ApiKeyScope[],
   Team: ['read:team', 'write:team'] as ApiKeyScope[],
   Other: ['read:analytics', 'manage:webhooks', 'manage:settings'] as ApiKeyScope[],
   Admin: ['admin'] as ApiKeyScope[],
@@ -228,6 +233,7 @@ export const API_KEY_PRESETS = {
       'read:customers',
       'read:invoices',
       'read:estimates',
+      'read:leads',
       'read:team',
       'read:analytics',
     ] as ApiKeyScope[],
