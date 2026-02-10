@@ -76,7 +76,8 @@ export async function POST(request: NextRequest) {
         .from('jobs')
         .select(`
           id, title, status, service_type, scheduled_start, scheduled_end,
-          total_cents, paid_cents, internal_notes, customer_notes,
+          total_estimate_cents, total_invoice_cents, paid_cents,
+          internal_notes, customer_notes,
           customer_id, location_id, assigned_to, priority,
           estimated_duration_minutes, created_at, updated_at, deleted
         `)
@@ -88,7 +89,7 @@ export async function POST(request: NextRequest) {
       // Customers updated since last sync
       supabase
         .from('customers')
-        .select('id, name, email, phone, company, source, tags, notes, created_at, updated_at, deleted')
+        .select('id, name, email, phone, notes, created_at, updated_at, deleted')
         .eq('owner_id', auth.ownerId)
         .gte('updated_at', syncCutoff.toISOString())
         .order('updated_at', { ascending: false })
@@ -97,7 +98,7 @@ export async function POST(request: NextRequest) {
       // Locations updated since last sync
       supabase
         .from('locations')
-        .select('id, customer_id, address1, address2, city, state, postal_code, lat, lng, notes, is_primary, created_at, updated_at, deleted')
+        .select('id, customer_id, address1, address2, city, state, postal_code, lat, lng, access_notes, created_at, updated_at, deleted')
         .eq('owner_id', auth.ownerId)
         .gte('updated_at', syncCutoff.toISOString())
         .order('updated_at', { ascending: false })
@@ -106,7 +107,7 @@ export async function POST(request: NextRequest) {
       // Line items updated since last sync
       supabase
         .from('line_items')
-        .select('id, job_id, kind, name, description, quantity, unit_price_cents, total_cents, created_at, updated_at, deleted')
+        .select('id, job_id, kind, name, description, qty, unit_price_cents, total_cents, sort_order, created_at, updated_at, deleted')
         .eq('owner_id', auth.ownerId)
         .gte('updated_at', syncCutoff.toISOString())
         .order('updated_at', { ascending: false })
@@ -115,7 +116,7 @@ export async function POST(request: NextRequest) {
       // Photos updated since last sync
       supabase
         .from('job_photos')
-        .select('id, job_id, url, thumbnail_url, caption, taken_at, created_at, deleted')
+        .select('id, job_id, kind, storage_bucket, storage_path, mime_type, caption, captured_at, created_at, deleted')
         .eq('owner_id', auth.ownerId)
         .gte('created_at', syncCutoff.toISOString())
         .order('created_at', { ascending: false })

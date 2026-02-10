@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
       .from('jobs')
       .select(`
         id, title, status, service_type, scheduled_start, scheduled_end,
-        total_cents, paid_cents, internal_notes, created_at, updated_at,
+        total_estimate_cents, total_invoice_cents, paid_cents, internal_notes, created_at, updated_at,
         customer:customers(id, name, phone, email),
         location:locations(id, address1, city, state, postal_code, lat, lng),
         assigned:team_members(id, full_name, phone)

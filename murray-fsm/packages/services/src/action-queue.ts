@@ -509,6 +509,303 @@ registerExecutor('create_lead', async (supabase, action) => {
   return { success: true, data: { lead_id: lead.id, customer_id: customerId } };
 });
 
+// --- propose_booking_times executor ---
+registerExecutor('propose_booking_times', async (supabase, action) => {
+  const p = action.payload as Record<string, unknown>;
+  const serviceType = p.service_type as string | undefined;
+  const numDays = (p.num_days as number) ?? 7;
+
+  // Estimate duration from service type
+  const durationMap: Record<string, number> = {
+    'Garage Door Repair': 90,
+    'Garage Door Installation': 240,
+    'Spring Replacement': 90,
+    'Panel Replacement': 120,
+    'Garage Door Opener Installation': 120,
+    'Garage Door Opener Repair': 60,
+    'Emergency Service': 120,
+    'Maintenance & Tune-up': 45,
+  };
+  const duration = (serviceType && durationMap[serviceType]) ?? 120;
+
+  // Fetch existing scheduled jobs
+  const { data: existingJobs } = await supabase
+    .from('jobs')
+    .select('id, scheduled_start, scheduled_end, title, status')
+    .eq('owner_id', action.owner_id)
+    .eq('deleted', false)
+    .not('status', 'in', '("canceled","completed")')
+    .not('scheduled_start', 'is', null);
+
+  if (!existingJobs) {
+    return { success: false, error: 'Failed to fetch existing jobs' };
+  }
+
+  // Find available slots for the next N days
+  const slots: Array<{ date: string; start: string; end: string; durationMinutes: number }> = [];
+  const today = new Date();
+
+  for (let i = 0; i < numDays; i++) {
+    const date = new Date(today);
+    date.setDate(date.getDate() + i);
+    const dayOfWeek = date.getDay();
+
+    // Business hours (Mon-Fri 8-17, Sat 9-14, Sun closed)
+    const hours: Record<number, [number, number]> = {
+      1: [8, 17], 2: [8, 17], 3: [8, 17], 4: [8, 17], 5: [8, 17], 6: [9, 14],
+    };
+    if (!hours[dayOfWeek]) continue;
+
+    const [startHour, endHour] = hours[dayOfWeek];
+    const dayStart = new Date(date);
+    dayStart.setHours(startHour, 0, 0, 0);
+    const dayEnd = new Date(date);
+    dayEnd.setHours(endHour, 0, 0, 0);
+
+    // Filter jobs for this day
+    const dateStr = date.toISOString().split('T')[0];
+    const dayJobs = existingJobs
+      .filter(j => j.scheduled_start?.startsWith(dateStr))
+      .sort((a, b) => a.scheduled_start.localeCompare(b.scheduled_start));
+
+    let cursor = new Date(Math.max(dayStart.getTime(), Date.now() + 30 * 60 * 1000));
+    // Round to next 15-min
+    cursor.setMinutes(Math.ceil(cursor.getMinutes() / 15) * 15, 0, 0);
+
+    for (const job of dayJobs) {
+      const jobStart = new Date(job.scheduled_start);
+      const jobEnd = job.scheduled_end ? new Date(job.scheduled_end) : new Date(jobStart.getTime() + 120 * 60000);
+      const gapEnd = new Date(jobStart.getTime() - 15 * 60000); // 15min buffer
+
+      if (gapEnd.getTime() - cursor.getTime() >= duration * 60000) {
+        slots.push({
+          date: dateStr,
+          start: cursor.toISOString(),
+          end: new Date(cursor.getTime() + duration * 60000).toISOString(),
+          durationMinutes: duration,
+        });
+      }
+      cursor = new Date(jobEnd.getTime() + 15 * 60000);
+    }
+
+    // After last job
+    while (dayEnd.getTime() - cursor.getTime() >= duration * 60000 && slots.length < 15) {
+      slots.push({
+        date: dateStr,
+        start: cursor.toISOString(),
+        end: new Date(cursor.getTime() + duration * 60000).toISOString(),
+        durationMinutes: duration,
+      });
+      cursor = new Date(cursor.getTime() + duration * 60000);
+    }
+
+    if (slots.length >= 15) break;
+  }
+
+  return {
+    success: true,
+    data: {
+      available_slots: slots.slice(0, 10),
+      service_type: serviceType,
+      estimated_duration_minutes: duration,
+      customer_id: p.customer_id,
+      lead_id: action.lead_id,
+    },
+  };
+});
+
+// --- book_appointment executor ---
+registerExecutor('book_appointment', async (supabase, action) => {
+  const p = action.payload as Record<string, unknown>;
+
+  if (!p.scheduled_start || !p.customer_id) {
+    return { success: false, error: 'scheduled_start and customer_id are required' };
+  }
+
+  const { data: job, error } = await supabase
+    .from('jobs')
+    .insert({
+      owner_id: action.owner_id,
+      customer_id: p.customer_id,
+      location_id: p.location_id ?? null,
+      title: (p.title as string) ?? 'Booked Appointment',
+      service_type: p.service_type ?? null,
+      problem_description: p.problem_description ?? null,
+      status: 'scheduled',
+      scheduled_start: p.scheduled_start,
+      scheduled_end: p.scheduled_end ?? null,
+      internal_notes: p.internal_notes ?? null,
+    })
+    .select()
+    .single();
+
+  if (error) return { success: false, error: error.message };
+
+  // Link lead if applicable
+  if (action.lead_id) {
+    await supabase
+      .from('leads')
+      .update({ converted_job_id: job.id, converted_at: new Date().toISOString() })
+      .eq('id', action.lead_id);
+  }
+
+  return { success: true, data: { job_id: job.id, scheduled_start: p.scheduled_start } };
+});
+
+// --- schedule_job executor ---
+registerExecutor('schedule_job', async (supabase, action) => {
+  const p = action.payload as Record<string, unknown>;
+  const jobId = (p.job_id as string) ?? action.job_id;
+
+  if (!jobId || !p.scheduled_start) {
+    return { success: false, error: 'job_id and scheduled_start are required' };
+  }
+
+  const { error } = await supabase
+    .from('jobs')
+    .update({
+      scheduled_start: p.scheduled_start,
+      scheduled_end: p.scheduled_end ?? null,
+      status: 'scheduled',
+    })
+    .eq('id', jobId)
+    .eq('owner_id', action.owner_id);
+
+  if (error) return { success: false, error: error.message };
+
+  return { success: true, data: { job_id: jobId, scheduled_start: p.scheduled_start } };
+});
+
+// --- reschedule_job executor ---
+registerExecutor('reschedule_job', async (supabase, action) => {
+  const p = action.payload as Record<string, unknown>;
+  const jobId = (p.job_id as string) ?? action.job_id;
+
+  if (!jobId || !p.scheduled_start) {
+    return { success: false, error: 'job_id and scheduled_start are required' };
+  }
+
+  // Fetch the old schedule for audit
+  const { data: oldJob } = await supabase
+    .from('jobs')
+    .select('scheduled_start, scheduled_end')
+    .eq('id', jobId)
+    .single();
+
+  const { error } = await supabase
+    .from('jobs')
+    .update({
+      scheduled_start: p.scheduled_start,
+      scheduled_end: p.scheduled_end ?? null,
+    })
+    .eq('id', jobId)
+    .eq('owner_id', action.owner_id);
+
+  if (error) return { success: false, error: error.message };
+
+  await writeAudit(supabase, {
+    ownerId: action.owner_id,
+    actor: 'system',
+    action: 'reschedule',
+    entityType: 'job',
+    entityId: jobId,
+    diff: {
+      before: { scheduled_start: oldJob?.scheduled_start, scheduled_end: oldJob?.scheduled_end },
+      after: { scheduled_start: p.scheduled_start, scheduled_end: p.scheduled_end },
+    },
+  });
+
+  return { success: true, data: { job_id: jobId, old_start: oldJob?.scheduled_start, new_start: p.scheduled_start } };
+});
+
+// --- request_review executor ---
+registerExecutor('request_review', async (supabase, action) => {
+  const p = action.payload as Record<string, unknown>;
+  const jobId = (p.job_id as string) ?? action.job_id;
+
+  if (!jobId) {
+    return { success: false, error: 'job_id is required' };
+  }
+
+  // Create review request record
+  const { data: reviewReq, error } = await supabase
+    .from('review_requests')
+    .insert({
+      owner_id: action.owner_id,
+      job_id: jobId,
+      customer_id: p.customer_id ?? null,
+      channel: p.send_via ?? 'sms',
+      status: 'pending',
+    })
+    .select()
+    .single();
+
+  if (error) return { success: false, error: error.message };
+
+  // Log outbound message intent (actual send via n8n workflow 06)
+  if (p.customer_phone) {
+    await supabase.from('message_logs').insert({
+      owner_id: action.owner_id,
+      direction: 'outbound',
+      channel: 'sms',
+      from_phone: null,
+      to_phone: p.customer_phone,
+      body: `Review request for job ${jobId}`,
+      status: 'queued',
+    });
+  }
+
+  return {
+    success: true,
+    data: {
+      review_request_id: reviewReq.id,
+      job_id: jobId,
+      channel: p.send_via ?? 'sms',
+      note: 'SMS delivery handled by n8n workflow 06',
+    },
+  };
+});
+
+// --- create_estimate executor ---
+registerExecutor('create_estimate', async (supabase, action) => {
+  const p = action.payload as Record<string, unknown>;
+  const jobId = (p.job_id as string) ?? action.job_id;
+  const items = p.items as Array<{ name: string; qty?: number; unit_price_cents: number; description?: string }> | undefined;
+
+  if (!jobId) {
+    return { success: false, error: 'job_id is required' };
+  }
+
+  if (!items || items.length === 0) {
+    return { success: false, error: 'At least one line item is required' };
+  }
+
+  // Insert estimate line items
+  const lineItems = items.map((item, i) => ({
+    owner_id: action.owner_id,
+    job_id: jobId,
+    kind: 'estimate',
+    name: item.name,
+    description: item.description ?? null,
+    qty: item.qty ?? 1,
+    unit_price_cents: item.unit_price_cents,
+    total_cents: (item.qty ?? 1) * item.unit_price_cents,
+    sort_order: i,
+  }));
+
+  const { error: insertErr } = await supabase.from('line_items').insert(lineItems);
+  if (insertErr) return { success: false, error: insertErr.message };
+
+  // Update job total
+  const totalEstimateCents = lineItems.reduce((sum, li) => sum + li.total_cents, 0);
+  await supabase
+    .from('jobs')
+    .update({ total_estimate_cents: totalEstimateCents })
+    .eq('id', jobId);
+
+  return { success: true, data: { job_id: jobId, total_estimate_cents: totalEstimateCents, item_count: lineItems.length } };
+});
+
 // ---------------------------------------------------------------------------
 // Audit Log
 // ---------------------------------------------------------------------------
