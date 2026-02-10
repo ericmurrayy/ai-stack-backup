@@ -35,61 +35,32 @@ interface Review {
 }
 
 async function getReviewsData() {
-  // In production, fetch from Supabase
-  const reviews: Review[] = [
-    {
-      id: '1',
-      platform: 'google',
-      reviewer_name: 'John Smith',
-      rating: 5,
-      title: 'Excellent service!',
-      content: 'Mike was fantastic! He arrived on time, explained everything clearly, and fixed my garage door quickly. Highly recommend!',
-      review_date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-      response: 'Thank you John! We appreciate your kind words and are glad we could help.',
-      response_date: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-      sentiment: 'positive',
-      review_url: 'https://google.com/review/123',
-    },
-    {
-      id: '2',
-      platform: 'yelp',
-      reviewer_name: 'Sarah Johnson',
-      rating: 5,
-      content: 'Best garage door service in Austin! They were professional, affordable, and did a great job on my new opener installation.',
-      review_date: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-      sentiment: 'positive',
-    },
-    {
-      id: '3',
-      platform: 'google',
-      reviewer_name: 'Mike Davis',
-      rating: 4,
-      content: 'Good service overall. The technician was knowledgeable and fixed the problem. Only minor issue was arrival was about 30 minutes late.',
-      review_date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-      sentiment: 'positive',
-    },
-    {
-      id: '4',
-      platform: 'facebook',
-      reviewer_name: 'Lisa Brown',
-      rating: 3,
-      content: 'Service was okay but pricing seemed higher than quoted. Would like more transparency on final costs.',
-      review_date: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
-      sentiment: 'neutral',
-    },
-  ];
+  const supabase = createClient();
 
+  const { data: reviews } = await supabase
+    .from('reviews')
+    .select('id, platform, reviewer_name, rating, title, content, review_date, response, response_date, sentiment, review_url')
+    .eq('deleted', false)
+    .order('review_date', { ascending: false })
+    .limit(50);
+
+  const list: Review[] = (reviews || []).map(r => ({
+    ...r,
+    sentiment: (r.sentiment || (r.rating >= 4 ? 'positive' : r.rating >= 3 ? 'neutral' : 'negative')) as 'positive' | 'neutral' | 'negative',
+  }));
+
+  const total = list.length || 1; // avoid division by zero
   const stats = {
-    totalReviews: reviews.length,
-    averageRating: reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length,
-    responseRate: reviews.filter(r => r.response).length / reviews.length * 100,
-    positive: reviews.filter(r => r.sentiment === 'positive').length,
-    neutral: reviews.filter(r => r.sentiment === 'neutral').length,
-    negative: reviews.filter(r => r.sentiment === 'negative').length,
-    needsResponse: reviews.filter(r => !r.response).length,
+    totalReviews: list.length,
+    averageRating: list.length > 0 ? list.reduce((sum, r) => sum + r.rating, 0) / total : 0,
+    responseRate: list.length > 0 ? list.filter(r => r.response).length / total * 100 : 0,
+    positive: list.filter(r => r.sentiment === 'positive').length,
+    neutral: list.filter(r => r.sentiment === 'neutral').length,
+    negative: list.filter(r => r.sentiment === 'negative').length,
+    needsResponse: list.filter(r => !r.response).length,
   };
 
-  return { reviews, stats };
+  return { reviews: list, stats };
 }
 
 const platformColors: Record<string, string> = {

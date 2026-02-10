@@ -269,6 +269,23 @@
     },
     {
       "parameters": {
+        "method": "POST",
+        "url": "={{ $env.FSM_API_URL || 'http://localhost:3000' }}/api/webhooks/inbound",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"type\": \"{{ $('Verify HMAC Signature').item.json.event.type }}\",\n  \"direction\": \"inbound\",\n  \"from_phone\": \"{{ $json.contact_phone }}\",\n  \"to_phone\": \"{{ $json.external_phone_number_id }}\",\n  \"body\": \"{{ $json.message ? $json.message.body : '' }}\",\n  \"external_message_id\": \"{{ $json.message ? $json.message.external_message_id : '' }}\",\n  \"external_call_id\": \"{{ $json.call ? $json.call.external_call_id : '' }}\",\n  \"transcript\": \"{{ $json.transcript || '' }}\",\n  \"owner_id\": \"{{ $env.SUPABASE_OWNER_ID }}\"\n}",
+        "options": {}
+      },
+      "id": "forward-to-fsm-api",
+      "name": "Forward to FSM API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1780, 500],
+      "notesInFlow": true,
+      "notes": "Alternative path: forward raw inbound data to FSM API /api/webhooks/inbound which handles customer upsert, lead creation, and action queue entry in one call."
+    },
+    {
+      "parameters": {
         "respondWith": "json",
         "responseBody": "={{ { success: true, event_id: $('Verify HMAC Signature').item.json.event.id } }}"
       },

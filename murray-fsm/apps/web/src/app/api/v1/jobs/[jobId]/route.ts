@@ -38,7 +38,7 @@ export async function GET(
         location:locations(*),
         assigned:team_members(id, full_name, phone, email, color),
         line_items:line_items(*),
-        photos:job_photos(id, url, caption, taken_at)
+        photos:job_photos(id, kind, storage_path, caption, captured_at)
       `)
       .eq('id', params.jobId)
       .eq('owner_id', auth.ownerId)

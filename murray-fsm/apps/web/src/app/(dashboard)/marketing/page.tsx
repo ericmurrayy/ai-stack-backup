@@ -50,65 +50,36 @@ interface Referral {
 }
 
 async function getMarketingData() {
-  // In production, fetch from Supabase
-  const campaigns: Campaign[] = [
-    {
-      id: '1',
-      name: 'Spring Maintenance Special',
-      status: 'active',
-      campaign_type: 'both',
-      total_recipients: 450,
-      total_sent: 450,
-      total_opened: 180,
-      total_clicked: 45,
-      total_converted: 12,
-      created_at: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-    },
-    {
-      id: '2',
-      name: 'Re-engagement Campaign',
-      status: 'scheduled',
-      campaign_type: 'email',
-      total_recipients: 200,
-      total_sent: 0,
-      total_opened: 0,
-      total_clicked: 0,
-      total_converted: 0,
-      scheduled_at: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
-      created_at: new Date().toISOString(),
-    },
-    {
-      id: '3',
-      name: 'Holiday Discount Offer',
-      status: 'completed',
-      campaign_type: 'sms',
-      total_recipients: 380,
-      total_sent: 380,
-      total_opened: 320,
-      total_clicked: 89,
-      total_converted: 23,
-      created_at: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-    },
-  ];
+  const supabase = createClient();
 
-  const referrals: Referral[] = [
-    {
-      id: '1',
-      referrer_name: 'John Smith',
-      referred_name: 'Mary Johnson',
-      status: 'converted',
-      referrer_reward_cents: 5000,
-      created_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-    },
-    {
-      id: '2',
-      referrer_name: 'Jane Doe',
-      referred_name: 'Bob Wilson',
-      status: 'contacted',
-      referrer_reward_cents: 5000,
-      created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-    },
-  ];
+  const { data: campaignRows } = await supabase
+    .from('marketing_campaigns')
+    .select('id, name, status, campaign_type, total_recipients, total_sent, total_opened, total_clicked, total_converted, scheduled_at, created_at')
+    .eq('deleted', false)
+    .order('created_at', { ascending: false })
+    .limit(20);
+
+  const campaigns: Campaign[] = (campaignRows || []).map(c => ({
+    ...c,
+    status: c.status as Campaign['status'],
+    campaign_type: c.campaign_type as Campaign['campaign_type'],
+  }));
+
+  const { data: referralRows } = await supabase
+    .from('referrals')
+    .select('id, referrer:referrer_customer_id(name), referred_name, status, referrer_reward_cents, created_at')
+    .eq('deleted', false)
+    .order('created_at', { ascending: false })
+    .limit(20);
+
+  const referrals: Referral[] = (referralRows || []).map(r => ({
+    id: r.id,
+    referrer_name: (r.referrer as any)?.name || 'Unknown',
+    referred_name: r.referred_name || 'Unknown',
+    status: r.status as Referral['status'],
+    referrer_reward_cents: r.referrer_reward_cents || 0,
+    created_at: r.created_at,
+  }));
 
   return { campaigns, referrals };
 }

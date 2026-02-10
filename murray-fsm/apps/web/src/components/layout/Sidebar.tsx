@@ -23,9 +23,11 @@ import {
   Megaphone,
   Package,
   Bot,
+  LayoutDashboard,
 } from 'lucide-react';
 
 const mainNavigation = [
+  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Jobs', href: '/jobs', icon: Briefcase },
   { name: 'Pipeline', href: '/pipeline', icon: Kanban },
   { name: 'Customers', href: '/customers', icon: Users },

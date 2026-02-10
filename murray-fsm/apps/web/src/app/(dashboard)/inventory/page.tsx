@@ -36,81 +36,23 @@ interface InventoryItem {
 }
 
 async function getInventoryData() {
-  // In production, fetch from Supabase
-  const items: InventoryItem[] = [
-    {
-      id: '1',
-      sku: 'SPR-001',
-      name: 'Torsion Spring (Standard)',
-      category: 'Springs',
-      quantity_on_hand: 12,
-      reorder_point: 5,
-      cost_cents: 4500,
-      price_cents: 12500,
-      supplier: 'ABC Parts Co.',
-      is_active: true,
-    },
-    {
-      id: '2',
-      sku: 'SPR-002',
-      name: 'Torsion Spring (Heavy Duty)',
-      category: 'Springs',
-      quantity_on_hand: 4,
-      reorder_point: 5,
-      cost_cents: 6500,
-      price_cents: 17500,
-      supplier: 'ABC Parts Co.',
-      is_active: true,
-    },
-    {
-      id: '3',
-      sku: 'OPN-001',
-      name: 'Belt Drive Opener',
-      category: 'Openers',
-      quantity_on_hand: 3,
-      reorder_point: 3,
-      cost_cents: 18000,
-      price_cents: 35000,
-      supplier: 'LiftMaster Dist.',
-      is_active: true,
-    },
-    {
-      id: '4',
-      sku: 'RLR-001',
-      name: 'Nylon Roller (10-pack)',
-      category: 'Rollers',
-      quantity_on_hand: 25,
-      reorder_point: 10,
-      cost_cents: 2500,
-      price_cents: 7500,
-      supplier: 'ABC Parts Co.',
-      is_active: true,
-    },
-    {
-      id: '5',
-      sku: 'PNL-001',
-      name: 'Steel Panel Section',
-      category: 'Panels',
-      quantity_on_hand: 2,
-      reorder_point: 4,
-      cost_cents: 15000,
-      price_cents: 32500,
-      supplier: 'Clopay Dist.',
-      is_active: true,
-    },
-    {
-      id: '6',
-      sku: 'CBL-001',
-      name: 'Lift Cable Set',
-      category: 'Cables',
-      quantity_on_hand: 8,
-      reorder_point: 5,
-      cost_cents: 3500,
-      price_cents: 9500,
-      supplier: 'ABC Parts Co.',
-      is_active: true,
-    },
-  ];
+  const supabase = createClient();
+
+  const { data: rows } = await supabase
+    .from('inventory_items')
+    .select('id, sku, name, category, quantity_on_hand, reorder_point, cost_cents, price_cents, supplier, is_active')
+    .eq('deleted', false)
+    .eq('is_active', true)
+    .order('name');
+
+  const items: InventoryItem[] = (rows || []).map(r => ({
+    ...r,
+    sku: r.sku || '',
+    category: r.category || 'Uncategorized',
+    quantity_on_hand: Number(r.quantity_on_hand) || 0,
+    reorder_point: Number(r.reorder_point) || 0,
+    supplier: r.supplier || '',
+  }));
 
   const lowStock = items.filter(i => i.quantity_on_hand <= i.reorder_point);
   const totalValue = items.reduce((sum, i) => sum + (i.quantity_on_hand * i.cost_cents), 0);

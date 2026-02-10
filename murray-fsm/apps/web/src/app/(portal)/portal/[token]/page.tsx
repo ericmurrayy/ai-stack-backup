@@ -19,6 +19,7 @@ import {
   Star,
 } from 'lucide-react';
 import { notFound } from 'next/navigation';
+import { EstimateActions, PayButton, PayNowButton } from './PortalActions';
 
 interface PortalData {
   customer: {
@@ -39,24 +40,22 @@ interface PortalData {
     title: string;
     status: string;
     scheduled_start: string;
-    total_cents: number;
+    total_invoice_cents: number;
     paid_cents: number;
   }>;
   estimates: Array<{
     id: string;
     job_id: string;
     job_title: string;
-    total_cents: number;
-    status: string;
+    total_estimate_cents: number;
     created_at: string;
   }>;
   invoices: Array<{
     id: string;
     job_id: string;
     job_title: string;
-    total_cents: number;
+    total_invoice_cents: number;
     paid_cents: number;
-    due_date: string;
   }>;
 }
 
@@ -87,57 +86,56 @@ async function getPortalData(token: string): Promise<PortalData | null> {
   // Get jobs
   const { data: jobs } = await supabase
     .from('jobs')
-    .select('id, title, status, scheduled_start, total_cents, paid_cents')
+    .select('id, title, status, scheduled_start, total_invoice_cents, paid_cents')
     .eq('customer_id', customerId)
     .eq('deleted', false)
     .order('scheduled_start', { ascending: false })
     .limit(10);
 
-  // Get pending estimates (line_items with kind='estimate')
+  // Get pending estimates: jobs with estimate line_items but no invoice created yet
   const { data: jobsWithEstimates } = await supabase
     .from('jobs')
     .select(`
-      id, title,
+      id, title, total_estimate_cents, total_invoice_cents,
       line_items!inner(id, total_cents, created_at)
     `)
     .eq('customer_id', customerId)
+    .eq('deleted', false)
     .eq('line_items.kind', 'estimate')
-    .eq('estimate_status', 'pending')
-    .eq('deleted', false);
+    .eq('line_items.deleted', false)
+    .gt('total_estimate_cents', 0)
+    .eq('total_invoice_cents', 0);
 
   const estimates = (jobsWithEstimates || []).map(job => ({
     id: job.line_items[0]?.id || job.id,
     job_id: job.id,
     job_title: job.title,
-    total_cents: job.line_items.reduce((sum: number, li: { total_cents: number }) => sum + li.total_cents, 0),
-    status: 'pending',
+    total_estimate_cents: job.total_estimate_cents,
     created_at: job.line_items[0]?.created_at,
   }));
 
-  // Get unpaid invoices
+  // Get unpaid invoices: jobs with invoice total > paid
   const { data: jobsWithInvoices } = await supabase
     .from('jobs')
-    .select('id, title, total_cents, paid_cents, invoice_due_date')
+    .select('id, title, total_invoice_cents, paid_cents')
     .eq('customer_id', customerId)
     .eq('deleted', false)
-    .gt('total_cents', 0)
-    .not('paid_cents', 'eq', supabase.rpc('get_total_cents'));
+    .gt('total_invoice_cents', 0);
 
   const invoices = (jobsWithInvoices || [])
-    .filter(job => job.total_cents > (job.paid_cents || 0))
+    .filter(job => job.total_invoice_cents > (job.paid_cents || 0))
     .map(job => ({
       id: job.id,
       job_id: job.id,
       job_title: job.title,
-      total_cents: job.total_cents,
+      total_invoice_cents: job.total_invoice_cents,
       paid_cents: job.paid_cents || 0,
-      due_date: job.invoice_due_date,
     }));
 
   // Update last accessed
   await supabase
     .from('customer_portal_tokens')
-    .update({ last_accessed_at: new Date().toISOString() })
+    .update({ last_used_at: new Date().toISOString() })
     .eq('token', token);
 
   return {
@@ -182,9 +180,9 @@ export default async function CustomerPortalPage({
   const { customer, business, jobs, estimates, invoices } = data;
 
   const upcomingJobs = jobs.filter(j => new Date(j.scheduled_start) > new Date());
-  const pendingEstimates = estimates.filter(e => e.status === 'pending');
-  const unpaidInvoices = invoices.filter(i => i.total_cents > i.paid_cents);
-  const totalOwed = unpaidInvoices.reduce((sum, i) => sum + (i.total_cents - i.paid_cents), 0);
+  const pendingEstimates = estimates;
+  const unpaidInvoices = invoices.filter(i => i.total_invoice_cents > i.paid_cents);
+  const totalOwed = unpaidInvoices.reduce((sum, i) => sum + (i.total_invoice_cents - i.paid_cents), 0);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -279,12 +277,12 @@ export default async function CustomerPortalPage({
                 </p>
               </div>
               {totalOwed > 0 && (
-                <button
-                  className="px-4 py-2 text-sm font-medium text-white rounded-lg"
-                  style={{ backgroundColor: business.primary_color }}
-                >
-                  Pay Now
-                </button>
+                <PayNowButton
+                  token={params.token}
+                  jobIds={unpaidInvoices.map(i => i.job_id)}
+                  primaryColor={business.primary_color}
+                  label="Pay Now"
+                />
               )}
             </div>
           </Card>
@@ -306,19 +304,13 @@ export default async function CustomerPortalPage({
                     </div>
                     <div className="flex items-center gap-4">
                       <span className="text-lg font-semibold text-slate-900">
-                        {formatCents(estimate.total_cents)}
+                        {formatCents(estimate.total_estimate_cents)}
                       </span>
-                      <div className="flex gap-2">
-                        <button className="px-3 py-1.5 text-sm font-medium text-red-700 bg-red-50 rounded-lg hover:bg-red-100">
-                          Decline
-                        </button>
-                        <button
-                          className="px-3 py-1.5 text-sm font-medium text-white rounded-lg"
-                          style={{ backgroundColor: business.primary_color }}
-                        >
-                          Approve
-                        </button>
-                      </div>
+                      <EstimateActions
+                        token={params.token}
+                        jobId={estimate.job_id}
+                        primaryColor={business.primary_color}
+                      />
                     </div>
                   </div>
                 </Card>
@@ -355,21 +347,20 @@ export default async function CustomerPortalPage({
                     <tr key={invoice.id} className="hover:bg-slate-50">
                       <td className="px-4 py-3 text-slate-900">{invoice.job_title}</td>
                       <td className="px-4 py-3 text-right text-slate-600">
-                        {formatCents(invoice.total_cents)}
+                        {formatCents(invoice.total_invoice_cents)}
                       </td>
                       <td className="px-4 py-3 text-right text-slate-600">
                         {formatCents(invoice.paid_cents)}
                       </td>
                       <td className="px-4 py-3 text-right font-medium text-slate-900">
-                        {formatCents(invoice.total_cents - invoice.paid_cents)}
+                        {formatCents(invoice.total_invoice_cents - invoice.paid_cents)}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <button
-                          className="px-3 py-1 text-sm font-medium text-white rounded"
-                          style={{ backgroundColor: business.primary_color }}
-                        >
-                          Pay
-                        </button>
+                        <PayButton
+                          token={params.token}
+                          jobId={invoice.job_id}
+                          primaryColor={business.primary_color}
+                        />
                       </td>
                     </tr>
                   ))}
@@ -411,9 +402,9 @@ export default async function CustomerPortalPage({
                     <Badge className={statusColors[job.status] || 'bg-slate-100 text-slate-800'}>
                       {job.status.replace('_', ' ')}
                     </Badge>
-                    {job.total_cents > 0 && (
+                    {job.total_invoice_cents > 0 && (
                       <span className="font-medium text-slate-900">
-                        {formatCents(job.total_cents)}
+                        {formatCents(job.total_invoice_cents)}
                       </span>
                     )}
                   </div>

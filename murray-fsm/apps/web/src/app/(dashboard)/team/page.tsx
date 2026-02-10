@@ -52,59 +52,9 @@ async function getTeamData(): Promise<TeamMember[]> {
     .order('full_name');
 
   if (!members?.length) {
-    // Return demo data if no team members exist
-    return [
-      {
-        id: '1',
-        full_name: 'Mike Johnson',
-        email: 'mike@example.com',
-        phone: '+15551234567',
-        role: 'technician',
-        color: '#3b82f6',
-        skills: ['Garage Door Repair', 'Spring Replacement', 'Opener Installation'],
-        is_active: true,
-        hourly_rate_cents: 2500,
-        jobs_today: 3,
-        jobs_this_week: 12,
-        revenue_this_month: 875000,
-        avg_rating: 4.8,
-        on_time_rate: 94,
-      },
-      {
-        id: '2',
-        full_name: 'Sarah Williams',
-        email: 'sarah@example.com',
-        phone: '+15559876543',
-        role: 'technician',
-        color: '#22c55e',
-        skills: ['Garage Door Installation', 'Panel Replacement'],
-        is_active: true,
-        hourly_rate_cents: 2800,
-        jobs_today: 2,
-        jobs_this_week: 10,
-        revenue_this_month: 920000,
-        avg_rating: 4.9,
-        on_time_rate: 98,
-      },
-      {
-        id: '3',
-        full_name: 'Tom Davis',
-        email: 'tom@example.com',
-        role: 'dispatcher',
-        color: '#f59e0b',
-        skills: [],
-        is_active: true,
-        hourly_rate_cents: 2000,
-        jobs_today: 0,
-        jobs_this_week: 0,
-        revenue_this_month: 0,
-        avg_rating: 0,
-        on_time_rate: 0,
-      },
-    ];
+    return [];
   }
 
-  // In production, would join with jobs/time_entries for real stats
   return members.map((m) => ({
     ...m,
     jobs_today: 0,
