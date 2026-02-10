@@ -15,7 +15,11 @@
     "functions:deploy": "cd supabase && supabase functions deploy",
     "tokens:build": "npx tsx packages/shared/src/tokens/build.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "canary:openphone": "vitest run scripts/canary-openphone.test.ts",
+    "canary:sync": "vitest run scripts/canary-sync.test.ts",
+    "canary:queue": "vitest run scripts/canary-action-queue.test.ts",
+    "canary": "vitest run scripts/canary-openphone.test.ts scripts/canary-sync.test.ts scripts/canary-action-queue.test.ts"
   },
   "keywords": [
     "fsm",

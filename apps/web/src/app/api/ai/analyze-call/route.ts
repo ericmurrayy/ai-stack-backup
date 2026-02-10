@@ -14,11 +14,43 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { createAdminClient } from '@/lib/supabase/server';
+import { checkRateLimit, rateLimitConfigs, getClientIdentifier, getRateLimitHeaders } from '@/lib/rate-limit';
+import { getWebhookSecret } from '@/lib/env-secrets';
+import crypto from 'crypto';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+
+/**
+ * Verify this endpoint is called internally (from call-received webhook)
+ * or by an authenticated user session.
+ */
+async function verifyInternalOrAuth(req: NextRequest): Promise<boolean> {
+  // Internal token from call-received handler
+  const internalToken = req.headers.get('x-internal-token');
+  if (internalToken) {
+    try {
+      return crypto.timingSafeEqual(
+        Buffer.from(internalToken),
+        Buffer.from(getWebhookSecret())
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  // Fallback: check for authenticated session (for manual re-analysis from dashboard)
+  try {
+    const { createClient } = await import('@/lib/supabase/server');
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    return !!user;
+  } catch {
+    return false;
+  }
+}
 
 // Service categories for garage door work
 const SERVICE_CATEGORIES = [
@@ -111,7 +143,23 @@ Return ONLY the JSON object. No markdown, no explanation.`;
  * Analyze a call transcript
  */
 export async function POST(req: NextRequest) {
+  // Rate limiting — protect Anthropic API spend
+  const clientId = getClientIdentifier(req);
+  const rateLimit = checkRateLimit(`ai:analyze:${clientId}`, rateLimitConfigs.ai);
+  if (!rateLimit.success) {
+    return NextResponse.json(
+      { error: 'Too many requests' },
+      { status: 429, headers: getRateLimitHeaders(rateLimit) }
+    );
+  }
+
   try {
+    // Verify caller is internal (webhook pipeline) or authenticated user
+    const isAuthorized = await verifyInternalOrAuth(req);
+    if (!isAuthorized) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     if (!ANTHROPIC_API_KEY) {
       return NextResponse.json(
         { error: 'AI not configured - missing ANTHROPIC_API_KEY' },
@@ -159,7 +207,7 @@ export async function POST(req: NextRequest) {
     } catch (parseError) {
       console.error('Failed to parse AI response:', responseText);
       return NextResponse.json(
-        { error: 'AI returned invalid response format', raw: responseText },
+        { error: 'AI returned invalid response format' },
         { status: 502 }
       );
     }
@@ -189,69 +237,75 @@ export async function POST(req: NextRequest) {
         !analysis.is_spam &&
         analysis.recommended_action === 'create_job'
       ) {
-        // Look up or create customer
-        if (phone_number) {
-          const { data: existingCustomer } = await supabase
-            .from('customers')
-            .select('id')
-            .eq('phone', phone_number)
-            .single();
-
-          if (existingCustomer) {
-            customer_id = existingCustomer.id;
-          } else if (analysis.customer_info.name) {
-            const { data: newCustomer } = await supabase
+        // Validate owner ID before creating records
+        const ownerId = process.env.DEFAULT_OWNER_ID;
+        if (!ownerId) {
+          console.error('[AI Analyze] DEFAULT_OWNER_ID not configured — skipping job creation');
+        } else {
+          // Look up or create customer
+          if (phone_number) {
+            const { data: existingCustomer } = await supabase
               .from('customers')
+              .select('id')
+              .eq('phone', phone_number)
+              .single();
+
+            if (existingCustomer) {
+              customer_id = existingCustomer.id;
+            } else if (analysis.customer_info.name) {
+              const { data: newCustomer } = await supabase
+                .from('customers')
+                .insert({
+                  owner_id: ownerId,
+                  name: analysis.customer_info.name,
+                  phone: phone_number,
+                  notes: `Auto-created from call analysis. ${analysis.issue_summary}`,
+                })
+                .select('id')
+                .single();
+
+              customer_id = newCustomer?.id || null;
+            }
+          }
+
+          // Create job only if we have a customer
+          if (customer_id) {
+            const { data: job, error: jobError } = await supabase
+              .from('jobs')
               .insert({
-                owner_id: process.env.DEFAULT_OWNER_ID || '00000000-0000-0000-0000-000000000000',
-                name: analysis.customer_info.name,
-                phone: phone_number,
-                notes: `Auto-created from call analysis. ${analysis.issue_summary}`,
+                owner_id: ownerId,
+                customer_id,
+                title: `${formatCategory(analysis.service_category)} - ${analysis.customer_info.city || 'Location TBD'}`,
+                service_type: analysis.service_category,
+                problem_description: analysis.issue_summary,
+                status: 'scheduled',
+                internal_notes: `AI analysis (confidence: ${Math.round(analysis.confidence * 100)}%)\nUrgency: ${analysis.urgency}\n${analysis.notes}`,
+                total_estimate_cents: analysis.suggested_price_range
+                  ? Math.round((analysis.suggested_price_range.low + analysis.suggested_price_range.high) / 2)
+                  : 0,
+                diagnostics: {
+                  source: 'ai_call_analysis',
+                  call_id,
+                  urgency: analysis.urgency,
+                  price_range: analysis.suggested_price_range,
+                },
               })
               .select('id')
               .single();
 
-            customer_id = newCustomer?.id || null;
-          }
-        }
+            if (job) {
+              created_job_id = job.id;
 
-        // Create job only if we have a customer
-        if (customer_id) {
-          const { data: job, error: jobError } = await supabase
-            .from('jobs')
-            .insert({
-              owner_id: process.env.DEFAULT_OWNER_ID || '00000000-0000-0000-0000-000000000000',
-              customer_id,
-              title: `${formatCategory(analysis.service_category)} - ${analysis.customer_info.city || 'Location TBD'}`,
-              service_type: analysis.service_category,
-              problem_description: analysis.issue_summary,
-              status: 'scheduled',
-              internal_notes: `AI analysis (confidence: ${Math.round(analysis.confidence * 100)}%)\nUrgency: ${analysis.urgency}\n${analysis.notes}`,
-              total_estimate_cents: analysis.suggested_price_range
-                ? Math.round((analysis.suggested_price_range.low + analysis.suggested_price_range.high) / 2)
-                : 0,
-              diagnostics: {
-                source: 'ai_call_analysis',
-                call_id,
-                urgency: analysis.urgency,
-                price_range: analysis.suggested_price_range,
-              },
-            })
-            .select('id')
-            .single();
+              // Link the call to the job
+              await supabase
+                .from('call_logs')
+                .update({ related_job_id: job.id })
+                .eq('id', call_id);
+            }
 
-          if (job) {
-            created_job_id = job.id;
-
-            // Link the call to the job
-            await supabase
-              .from('call_logs')
-              .update({ related_job_id: job.id })
-              .eq('id', call_id);
-          }
-
-          if (jobError) {
-            console.error('Failed to create job from call analysis:', jobError);
+            if (jobError) {
+              console.error('Failed to create job from call analysis:', jobError);
+            }
           }
         }
       }
@@ -279,6 +333,14 @@ export async function POST(req: NextRequest) {
  */
 export async function GET(req: NextRequest) {
   try {
+    // Require authenticated session for read access
+    const { createClient } = await import('@/lib/supabase/server');
+    const authSupabase = createClient();
+    const { data: { user } } = await authSupabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const supabase = createAdminClient();
     const { searchParams } = new URL(req.url);
     const callId = searchParams.get('call_id');

@@ -768,6 +768,49 @@ export const SendEmailSchema = z.object({
 });
 
 // ============================================================================
+// SYNC SCHEMAS (mobile offline-first)
+// ============================================================================
+
+export const SyncChangeActionSchema = z.enum(['create', 'update', 'delete']);
+
+export const SyncChangeSchema = z.object({
+  id: z.string().min(1, 'Change ID is required'),
+  action: SyncChangeActionSchema,
+  data: z.record(z.unknown()).optional(),
+  updated_at: z.string().datetime().optional(),
+});
+
+export const SyncRequestSchema = z.object({
+  lastSyncedAt: z.string().datetime().optional(),
+  deviceId: z.string().min(1, 'Device ID is required').max(200),
+  cursor: z.string().datetime().optional(),
+  changes: z.object({
+    jobs: z.array(SyncChangeSchema).max(500).optional(),
+    photos: z.array(SyncChangeSchema).max(200).optional(),
+  }).optional(),
+});
+
+// ============================================================================
+// API LIST QUERY SCHEMAS (v1 endpoints)
+// ============================================================================
+
+export const CustomerListQuerySchema = z.object({
+  search: z.string().max(200).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+
+export const JobListQuerySchema = z.object({
+  status: z.enum(['scheduled', 'in_progress', 'completed', 'canceled']).optional(),
+  assigned_to: z.string().uuid().optional(),
+  customer_id: z.string().uuid().optional(),
+  from_date: z.string().datetime().optional(),
+  to_date: z.string().datetime().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+
+// ============================================================================
 // TYPE EXPORTS
 // ============================================================================
 
@@ -805,3 +848,7 @@ export type EquipmentUpdate = z.infer<typeof EquipmentUpdateSchema>;
 export type FollowUpCreate = z.infer<typeof FollowUpCreateSchema>;
 export type FollowUpUpdate = z.infer<typeof FollowUpUpdateSchema>;
 export type BusinessSettings = z.infer<typeof BusinessSettingsSchema>;
+export type SyncChange = z.infer<typeof SyncChangeSchema>;
+export type SyncRequest = z.infer<typeof SyncRequestSchema>;
+export type CustomerListQuery = z.infer<typeof CustomerListQuerySchema>;
+export type JobListQuery = z.infer<typeof JobListQuerySchema>;

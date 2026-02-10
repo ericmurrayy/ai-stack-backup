@@ -1,7 +1,10 @@
 // Murray's FSM - Reject Action API
 // ===================================
+// Atomically transitions action: pending → rejected
+// Event-logged for audit trail.
 
 import { createClient } from '@/lib/supabase/server';
+import { logActionEvent } from '@/lib/event-log';
 import { NextResponse } from 'next/server';
 
 export async function POST(request: Request) {
@@ -20,7 +23,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Update action status to rejected
+    // Atomically reject: only pending actions owned by user can transition
     const { data, error } = await supabase
       .from('action_queue')
       .update({
@@ -41,6 +44,18 @@ export async function POST(request: Request) {
     if (!data) {
       return NextResponse.json({ error: 'Action not found or already processed' }, { status: 404 });
     }
+
+    // Log the rejection event (never throws)
+    await logActionEvent(supabase, {
+      action_id: actionId,
+      owner_id: user.id,
+      event_type: 'rejected',
+      actor_type: 'user',
+      actor_id: user.id,
+      old_status: 'pending',
+      new_status: 'rejected',
+      metadata: { reason: reason || 'Rejected by user' },
+    });
 
     return NextResponse.json({ success: true, action: data });
   } catch (error) {

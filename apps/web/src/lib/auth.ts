@@ -5,6 +5,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
+import crypto from 'crypto'
 
 export interface AuthenticatedUser {
   id: string
@@ -131,17 +132,11 @@ export async function requireAuth(request: NextRequest) {
 }
 
 /**
- * Hash an API key for secure storage/lookup
+ * Hash an API key for secure storage/lookup.
+ * Uses SHA-256 — must match packages/services/src/api-keys.ts hashApiKey().
  */
 function hashApiKey(key: string): string {
-  // Simple hash for now - in production use crypto.subtle.digest
-  let hash = 0
-  for (let i = 0; i < key.length; i++) {
-    const char = key.charCodeAt(i)
-    hash = ((hash << 5) - hash) + char
-    hash = hash & hash
-  }
-  return Math.abs(hash).toString(36)
+  return crypto.createHash('sha256').update(key).digest('hex')
 }
 
 /**

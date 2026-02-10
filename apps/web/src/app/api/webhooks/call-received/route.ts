@@ -15,19 +15,88 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
+import { checkRateLimit, rateLimitConfigs, getClientIdentifier, getRateLimitHeaders } from '@/lib/rate-limit';
+import { getWebhookSecret } from '@/lib/env-secrets';
+import crypto from 'crypto';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60; // Allow time for AI analysis
+
+/**
+ * Verify webhook request authenticity.
+ * Accepts HMAC-SHA256 signature (x-webhook-signature header)
+ * or a shared secret (x-webhook-secret header).
+ * Internal requests from Beside handler are trusted via x-internal-token.
+ */
+function verifyWebhookAuth(rawBody: string, headers: Headers): boolean {
+  const secret = getWebhookSecret()
+
+  // Trust internal forwards from /api/webhooks/beside (already HMAC-verified there)
+  const internalToken = headers.get('x-internal-token');
+  if (internalToken) {
+    try {
+      return crypto.timingSafeEqual(Buffer.from(internalToken), Buffer.from(secret));
+    } catch {
+      return false;
+    }
+  }
+
+  // HMAC signature verification
+  const signature = headers.get('x-webhook-signature');
+  if (signature) {
+    const expected = crypto
+      .createHmac('sha256', secret)
+      .update(rawBody)
+      .digest('hex');
+    try {
+      return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+    } catch {
+      return false;
+    }
+  }
+
+  // Shared secret header verification
+  const sharedSecret = headers.get('x-webhook-secret');
+  if (sharedSecret) {
+    try {
+      return crypto.timingSafeEqual(
+        Buffer.from(sharedSecret),
+        Buffer.from(secret)
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  return false;
+}
 
 /**
  * POST /api/webhooks/call-received
  * Handle inbound call webhook from phone provider
  */
 export async function POST(req: NextRequest) {
+  // Rate limiting — prevent abuse
+  const clientId = getClientIdentifier(req);
+  const rateLimit = checkRateLimit(`webhook:call:${clientId}`, rateLimitConfigs.webhook);
+  if (!rateLimit.success) {
+    return NextResponse.json(
+      { error: 'Too many requests' },
+      { status: 429, headers: getRateLimitHeaders(rateLimit) }
+    );
+  }
+
   const supabase = createAdminClient();
 
   try {
     const rawBody = await req.text();
+
+    // Verify webhook authenticity
+    if (!verifyWebhookAuth(rawBody, req.headers)) {
+      console.warn('[Call Webhook] Auth failed — rejecting');
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     let payload: Record<string, any>;
 
     try {
@@ -49,12 +118,32 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ received: true, skipped: true, reason: 'too_short' });
     }
 
+    // Require a provider call ID for idempotency (UNIQUE constraint on external_call_id)
+    if (!callData.provider_call_id) {
+      console.warn('[Call Webhook] No provider_call_id — rejecting to prevent duplicates');
+      return NextResponse.json(
+        { error: 'Missing provider call ID', code: 'MISSING_CALL_ID' },
+        { status: 400 }
+      );
+    }
+
+    // Validate DEFAULT_OWNER_ID
+    const ownerId = process.env.DEFAULT_OWNER_ID;
+    if (!ownerId) {
+      console.error('[Call Webhook] DEFAULT_OWNER_ID not configured');
+      return NextResponse.json(
+        { error: 'Server misconfigured' },
+        { status: 500 }
+      );
+    }
+
     // Store the call record in call_logs table (matches schema.sql)
+    // external_call_id UNIQUE constraint prevents duplicate processing
     const { data: call, error: callError } = await supabase
       .from('call_logs')
       .insert({
-        owner_id: process.env.DEFAULT_OWNER_ID || '00000000-0000-0000-0000-000000000000',
-        external_call_id: callData.provider_call_id || `webhook_${Date.now()}`,
+        owner_id: ownerId,
+        external_call_id: callData.provider_call_id,
         direction: callData.direction,
         from_phone: callData.from_number,
         to_phone: callData.to_number,
@@ -68,6 +157,12 @@ export async function POST(req: NextRequest) {
       .single();
 
     if (callError) {
+      // Handle duplicate webhook delivery gracefully (UNIQUE constraint on external_call_id)
+      if (callError.code === '23505') {
+        console.log(`[Call Webhook] Duplicate webhook for ${callData.provider_call_id} — ignoring`);
+        return NextResponse.json({ received: true, duplicate: true });
+      }
+
       console.error('[Call Webhook] Failed to store call:', callError);
       return NextResponse.json(
         { error: 'Failed to store call record' },
@@ -83,7 +178,10 @@ export async function POST(req: NextRequest) {
         const analysisUrl = new URL('/api/ai/analyze-call', req.url);
         const analysisResponse = await fetch(analysisUrl.toString(), {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'x-internal-token': getWebhookSecret(),
+          },
           body: JSON.stringify({
             transcript: callData.transcript,
             call_id: call.id,

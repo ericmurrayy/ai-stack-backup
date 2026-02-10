@@ -11,25 +11,28 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
+import { getBesideWebhookSecret, getWebhookSecret } from '@/lib/env-secrets';
 import crypto from 'crypto';
 
 const DEFAULT_OWNER_ID = process.env.DEFAULT_OWNER_ID || '';
-const BESIDE_WEBHOOK_SECRET = process.env.BESIDE_WEBHOOK_SECRET || '';
 
-function verifySignature(rawBody: string, signature: string | null): boolean {
-  if (!BESIDE_WEBHOOK_SECRET) {
-    console.warn('[Beside] No BESIDE_WEBHOOK_SECRET configured — skipping verification');
-    return true;
+function verifySignature(rawBody: string, signature: string | null): { ok: boolean, reason?: string } {
+  const secret = getBesideWebhookSecret()
+  if (!secret) {
+    return { ok: false, reason: 'BESIDE_WEBHOOK_SECRET not configured. Set it to the signing secret from your Beside dashboard.' }
   }
-  if (!signature) return false;
+  if (!signature) {
+    return { ok: false, reason: 'No signature header provided by Beside' }
+  }
   const expected = crypto
-    .createHmac('sha256', BESIDE_WEBHOOK_SECRET)
+    .createHmac('sha256', secret)
     .update(rawBody)
     .digest('hex');
   try {
-    return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+    const valid = crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+    return valid ? { ok: true } : { ok: false, reason: 'Signature mismatch' }
   } catch {
-    return false;
+    return { ok: false, reason: 'Signature verification error' }
   }
 }
 
@@ -54,9 +57,13 @@ export async function POST(request: NextRequest) {
     const signature =
       request.headers.get('x-webhook-signature') ||
       request.headers.get('x-beside-signature');
-    if (!verifySignature(rawBody, signature)) {
-      console.warn('[Beside] Invalid signature — rejecting');
-      return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
+    const sigResult = verifySignature(rawBody, signature);
+    if (!sigResult.ok) {
+      console.warn(`[Beside] Auth failed: ${sigResult.reason}`);
+      return NextResponse.json(
+        { error: 'Unauthorized', hint: sigResult.reason },
+        { status: 401 }
+      );
     }
 
     let payload: Record<string, any>;
@@ -81,7 +88,10 @@ export async function POST(request: NextRequest) {
       const callReceivedUrl = new URL('/api/webhooks/call-received', request.url);
       const res = await fetch(callReceivedUrl.toString(), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-internal-token': getWebhookSecret(),
+        },
         body: JSON.stringify(forwarded),
       });
 

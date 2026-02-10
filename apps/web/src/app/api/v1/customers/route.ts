@@ -1,36 +1,51 @@
 // Murray's FSM - Public Customers API v1
 // ======================================
+// Standardized request/response contracts with Zod validation.
 
-import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { NextRequest } from 'next/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { hasScope } from '@murray-fsm/services';
+import { CustomerCreateSchema, CustomerListQuerySchema } from '@murray-fsm/shared';
+import { createClient } from '@/lib/supabase/server';
+import {
+  apiSuccess,
+  apiUnauthorized,
+  apiForbidden,
+  apiValidationError,
+  apiInternalError,
+  generateRequestId,
+  paginationMeta,
+} from '@/lib/api-response';
 
 // GET /api/v1/customers - List customers
 export async function GET(request: NextRequest) {
+  const requestId = generateRequestId();
   const auth = await authenticateApiRequest(request);
 
   if (!auth.authenticated) {
-    return NextResponse.json(
-      { error: auth.error, code: 'UNAUTHORIZED' },
-      { status: auth.statusCode || 401 }
-    );
+    return apiUnauthorized(auth.error || 'Unauthorized', requestId);
   }
 
   if (!hasScope(auth.scopes!, 'read:customers')) {
-    return NextResponse.json(
-      { error: 'Insufficient permissions', code: 'FORBIDDEN' },
-      { status: 403 }
-    );
+    return apiForbidden('Insufficient permissions — requires read:customers', requestId);
   }
 
   try {
     const supabase = await createClient();
     const { searchParams } = new URL(request.url);
 
-    const search = searchParams.get('search');
-    const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 100);
-    const offset = parseInt(searchParams.get('offset') || '0');
+    // Validate query params
+    const parsed = CustomerListQuerySchema.safeParse({
+      search: searchParams.get('search') || undefined,
+      limit: searchParams.get('limit') || undefined,
+      offset: searchParams.get('offset') || undefined,
+    });
+
+    if (!parsed.success) {
+      return apiValidationError(parsed.error, requestId);
+    }
+
+    const { search, limit, offset } = parsed.data;
 
     let query = supabase
       .from('customers')
@@ -45,7 +60,6 @@ export async function GET(request: NextRequest) {
       .range(offset, offset + limit - 1);
 
     if (search) {
-      // Escape special characters to prevent query manipulation
       const sanitized = search.replace(/[%_\\]/g, '\\$&');
       query = query.or(`name.ilike.%${sanitized}%,email.ilike.%${sanitized}%,phone.ilike.%${sanitized}%`);
     }
@@ -54,54 +68,41 @@ export async function GET(request: NextRequest) {
 
     if (error) throw error;
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        customers,
-        total: count,
-        limit,
-        offset,
-      },
-    });
-  } catch (error) {
-    console.error('Customers API error:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch customers', code: 'INTERNAL_ERROR' },
-      { status: 500 }
+    return apiSuccess(
+      { customers },
+      paginationMeta(count, limit, offset),
+      200,
+      requestId,
     );
+  } catch (error) {
+    return apiInternalError(error, 'Customers:GET', requestId);
   }
 }
 
 // POST /api/v1/customers - Create customer
 export async function POST(request: NextRequest) {
+  const requestId = generateRequestId();
   const auth = await authenticateApiRequest(request);
 
   if (!auth.authenticated) {
-    return NextResponse.json(
-      { error: auth.error, code: 'UNAUTHORIZED' },
-      { status: auth.statusCode || 401 }
-    );
+    return apiUnauthorized(auth.error || 'Unauthorized', requestId);
   }
 
   if (!hasScope(auth.scopes!, 'write:customers')) {
-    return NextResponse.json(
-      { error: 'Insufficient permissions', code: 'FORBIDDEN' },
-      { status: 403 }
-    );
+    return apiForbidden('Insufficient permissions — requires write:customers', requestId);
   }
 
   try {
     const supabase = await createClient();
     const body = await request.json();
 
-    const { name, email, phone, company, source, locations } = body;
-
-    if (!name) {
-      return NextResponse.json(
-        { error: 'name is required', code: 'VALIDATION_ERROR' },
-        { status: 400 }
-      );
+    // Validate with Zod
+    const parsed = CustomerCreateSchema.safeParse(body);
+    if (!parsed.success) {
+      return apiValidationError(parsed.error, requestId);
     }
+
+    const { name, email, phone, source } = parsed.data;
 
     // Create customer
     const { data: customer, error: customerError } = await supabase
@@ -111,7 +112,6 @@ export async function POST(request: NextRequest) {
         name,
         email,
         phone,
-        company,
         source: source || 'api',
       })
       .select()
@@ -120,6 +120,7 @@ export async function POST(request: NextRequest) {
     if (customerError) throw customerError;
 
     // Create locations if provided
+    const locations = (body as any).locations;
     if (locations && Array.isArray(locations) && locations.length > 0) {
       const locationsToInsert = locations.map((loc: Record<string, unknown>, index: number) => ({
         owner_id: auth.ownerId,
@@ -145,15 +146,8 @@ export async function POST(request: NextRequest) {
       .eq('id', customer.id)
       .single();
 
-    return NextResponse.json({
-      success: true,
-      data: { customer: completeCustomer },
-    }, { status: 201 });
+    return apiSuccess({ customer: completeCustomer }, undefined, 201, requestId);
   } catch (error) {
-    console.error('Create customer error:', error);
-    return NextResponse.json(
-      { error: 'Failed to create customer', code: 'INTERNAL_ERROR' },
-      { status: 500 }
-    );
+    return apiInternalError(error, 'Customers:POST', requestId);
   }
 }

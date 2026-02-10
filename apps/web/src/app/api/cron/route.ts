@@ -14,6 +14,7 @@ import { paymentRemindersService } from '@packages/services/payment-reminders';
 import { inventoryAlertsService } from '@packages/services/inventory-alerts';
 import { recurringJobsService } from '@packages/services/recurring-jobs';
 import { followUpsService } from '@packages/services/follow-ups';
+import { getCronSecret } from '@/lib/env-secrets';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -25,16 +26,13 @@ export const maxDuration = 60;
  * Authorization: Requires CRON_SECRET header
  */
 export async function GET(req: NextRequest) {
-  // Verify cron secret
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret) {
-    const authHeader = req.headers.get('authorization');
-    if (authHeader !== `Bearer ${cronSecret}`) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
+  // Verify cron secret (auto-generated if not configured)
+  const authHeader = req.headers.get('authorization');
+  if (authHeader !== `Bearer ${getCronSecret()}`) {
+    return NextResponse.json(
+      { error: 'Unauthorized' },
+      { status: 401 }
+    );
   }
 
   console.log('[Cron] Starting scheduled tasks...');
@@ -140,16 +138,13 @@ export async function GET(req: NextRequest) {
  * Run specific scheduled task
  */
 export async function POST(req: NextRequest) {
-  // Verify cron secret
-  const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret) {
-    const authHeader = req.headers.get('authorization');
-    if (authHeader !== `Bearer ${cronSecret}`) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
+  // Verify cron secret (auto-generated if not configured)
+  const authHeader = req.headers.get('authorization');
+  if (authHeader !== `Bearer ${getCronSecret()}`) {
+    return NextResponse.json(
+      { error: 'Unauthorized' },
+      { status: 401 }
+    );
   }
 
   const body = await req.json();

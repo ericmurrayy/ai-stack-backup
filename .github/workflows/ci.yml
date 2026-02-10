@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    name: Lint → Typecheck → Build → Test → Canaries
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 8
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint (web)
+        run: pnpm --filter @murray-fsm/web lint
+
+      - name: Typecheck (web)
+        run: pnpm --filter @murray-fsm/web typecheck
+
+      - name: Build (web)
+        run: pnpm build:web
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
+          SUPABASE_SERVICE_ROLE_KEY: placeholder-service-key
+          DEFAULT_OWNER_ID: 00000000-0000-0000-0000-000000000000
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Canary — OpenPhone webhook pipeline
+        run: pnpm canary:openphone
+
+      - name: Canary — Offline sync pipeline
+        run: pnpm canary:sync
+
+      - name: Canary — Action queue approval gate
+        run: pnpm canary:queue
