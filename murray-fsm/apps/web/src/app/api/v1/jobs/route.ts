@@ -6,6 +6,36 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { authenticateApiRequest, logApiUsage } from '@/lib/api-auth';
 import { hasScope } from '@murray-fsm/services';
+import { z } from 'zod';
+import { validateBody, validateQuery, positiveIntString, nonNegativeIntString, isoDateString, uuidString } from '@/lib/api-validation';
+
+// --- Zod Schemas ---
+
+const JOB_STATUSES = ['new', 'contacted', 'scheduled', 'in_progress', 'completed', 'cancelled', 'spam'] as const;
+
+const listJobsQuerySchema = z.object({
+  status: z.enum(JOB_STATUSES).optional(),
+  assigned_to: uuidString.optional(),
+  customer_id: uuidString.optional(),
+  from_date: isoDateString.optional(),
+  to_date: isoDateString.optional(),
+  limit: positiveIntString(50).pipe(z.number().max(100, 'limit must be at most 100')),
+  offset: nonNegativeIntString(0),
+});
+
+const createJobBodySchema = z.object({
+  title: z.string().min(1, 'title is required').max(500),
+  customer_id: uuidString,
+  location_id: uuidString.optional(),
+  scheduled_start: isoDateString.optional(),
+  scheduled_end: isoDateString.optional(),
+  service_type: z.string().max(200).optional(),
+  status: z.enum(JOB_STATUSES).optional(),
+  assigned_to: uuidString.optional(),
+  notes: z.string().max(5000).optional(),
+  priority: z.number().int().min(0).max(10).optional(),
+  estimated_duration_minutes: z.number().int().positive().optional(),
+});
 
 // GET /api/v1/jobs - List jobs
 export async function GET(request: NextRequest) {
@@ -30,14 +60,11 @@ export async function GET(request: NextRequest) {
     const supabase = createClient();
     const { searchParams } = new URL(request.url);
 
-    // Parse query parameters
-    const status = searchParams.get('status');
-    const assignedTo = searchParams.get('assigned_to');
-    const customerId = searchParams.get('customer_id');
-    const fromDate = searchParams.get('from_date');
-    const toDate = searchParams.get('to_date');
-    const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 100);
-    const offset = parseInt(searchParams.get('offset') || '0');
+    // Validate query parameters
+    const queryResult = validateQuery(listJobsQuerySchema, searchParams);
+    if (!queryResult.success) return queryResult.response;
+
+    const { status, assigned_to: assignedTo, customer_id: customerId, from_date: fromDate, to_date: toDate, limit, offset } = queryResult.data;
 
     // Build query
     let query = supabase
@@ -119,32 +146,28 @@ export async function POST(request: NextRequest) {
     const supabase = createClient();
     const body = await request.json();
 
-    // Validate required fields
-    const { title, customer_id, location_id, scheduled_start } = body;
+    // Validate request body
+    const bodyResult = validateBody(createJobBodySchema, body);
+    if (!bodyResult.success) return bodyResult.response;
 
-    if (!title || !customer_id) {
-      return NextResponse.json(
-        { error: 'title and customer_id are required', code: 'VALIDATION_ERROR' },
-        { status: 400 }
-      );
-    }
+    const validated = bodyResult.data;
 
     // Create job
     const { data: job, error } = await supabase
       .from('jobs')
       .insert({
         owner_id: auth.ownerId,
-        title,
-        customer_id,
-        location_id,
-        scheduled_start,
-        scheduled_end: body.scheduled_end,
-        service_type: body.service_type || 'general',
-        status: body.status || 'scheduled',
-        assigned_to: body.assigned_to,
-        internal_notes: body.notes,
-        priority: body.priority || 0,
-        estimated_duration_minutes: body.estimated_duration_minutes || 120,
+        title: validated.title,
+        customer_id: validated.customer_id,
+        location_id: validated.location_id,
+        scheduled_start: validated.scheduled_start,
+        scheduled_end: validated.scheduled_end,
+        service_type: validated.service_type || 'general',
+        status: validated.status || 'scheduled',
+        assigned_to: validated.assigned_to,
+        internal_notes: validated.notes,
+        priority: validated.priority || 0,
+        estimated_duration_minutes: validated.estimated_duration_minutes || 120,
       })
       .select()
       .single();

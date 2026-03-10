@@ -5,6 +5,27 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { authenticateApiRequest } from '@/lib/api-auth';
 import { hasScope } from '@murray-fsm/services';
+import { z } from 'zod';
+import { validateBody, validateUUID, isoDateString, uuidString } from '@/lib/api-validation';
+
+// --- Zod Schemas ---
+
+const JOB_STATUSES = ['new', 'contacted', 'scheduled', 'in_progress', 'completed', 'cancelled', 'spam'] as const;
+
+const updateJobBodySchema = z.object({
+  title: z.string().min(1).max(500).optional(),
+  status: z.enum(JOB_STATUSES).optional(),
+  service_type: z.string().max(200).optional(),
+  scheduled_start: isoDateString.optional(),
+  scheduled_end: isoDateString.optional(),
+  assigned_to: uuidString.optional(),
+  internal_notes: z.string().max(5000).optional(),
+  priority: z.number().int().min(0).max(10).optional(),
+  estimated_duration_minutes: z.number().int().positive().optional(),
+  actual_duration_minutes: z.number().int().nonnegative().optional(),
+  customer_rating: z.number().int().min(1).max(5).optional(),
+  customer_feedback: z.string().max(2000).optional(),
+}).strict({ message: 'Unknown fields are not allowed' });
 
 // GET /api/v1/jobs/:jobId - Get job details
 export async function GET(
@@ -26,6 +47,10 @@ export async function GET(
       { status: 403 }
     );
   }
+
+  // Validate jobId is a UUID
+  const jobIdResult = validateUUID(params.jobId, 'jobId');
+  if (!jobIdResult.success) return jobIdResult.response;
 
   try {
     const supabase = createClient();
@@ -86,24 +111,28 @@ export async function PATCH(
     );
   }
 
+  // Validate jobId is a UUID
+  const patchJobIdResult = validateUUID(params.jobId, 'jobId');
+  if (!patchJobIdResult.success) return patchJobIdResult.response;
+
   try {
     const supabase = createClient();
     const body = await request.json();
+
+    // Validate update fields against allowed list with proper types
+    const bodyResult = validateBody(updateJobBodySchema, body);
+    if (!bodyResult.success) return bodyResult.response;
+
+    const validated = bodyResult.data;
 
     // Build update object (only include fields that were provided)
     const updates: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
     };
 
-    const allowedFields = [
-      'title', 'status', 'service_type', 'scheduled_start', 'scheduled_end',
-      'assigned_to', 'internal_notes', 'priority', 'estimated_duration_minutes',
-      'actual_duration_minutes', 'customer_rating', 'customer_feedback'
-    ];
-
-    for (const field of allowedFields) {
-      if (body[field] !== undefined) {
-        updates[field] = body[field];
+    for (const [field, value] of Object.entries(validated)) {
+      if (value !== undefined) {
+        updates[field] = value;
       }
     }
 
@@ -156,6 +185,10 @@ export async function DELETE(
       { status: 403 }
     );
   }
+
+  // Validate jobId is a UUID
+  const deleteJobIdResult = validateUUID(params.jobId, 'jobId');
+  if (!deleteJobIdResult.success) return deleteJobIdResult.response;
 
   try {
     const supabase = createClient();

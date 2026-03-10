@@ -1109,7 +1109,6 @@ CREATE POLICY "action_queue_authenticated_delete"
 -- SECTION 26: BUSINESS_SETTINGS  (special: anon SELECT for booking widget)
 -- ============================================================================
 -- Per-owner business configuration.
--- Authenticated users: full CRUD.
 -- RESTRICTED: Owner-only for authenticated users.
 -- Anon SELECT preserved for public booking widget.
 
@@ -1368,24 +1367,24 @@ CREATE POLICY "payments_authenticated_delete"
 -- ============================================================================
 -- NOTES
 -- ============================================================================
--- 1. All 33 public tables have RLS ENABLED and authenticated CRUD policies.
---    This is an internal business application where every logged-in user
---    should see all data within the Supabase project.
+-- 1. All public tables have RLS ENABLED and authenticated CRUD policies.
+--    Most tables use USING(true) for full access within the Supabase project.
 --
--- 2. service_role (used by Edge Functions) bypasses RLS entirely.
+-- 2. SENSITIVE TABLES use owner_id = auth.uid() for row-level filtering:
+--      - api_keys           : owner-only (key hashes, scopes, rate limits)
+--      - webhook_endpoints  : owner-only (webhook secrets, URLs)
+--      - business_settings  : owner-only for authenticated; anon SELECT kept
+--      - profiles           : owner-only (id = auth.uid() OR owner_id = auth.uid())
 --
--- 3. Special anon access:
+-- 3. service_role (used by Edge Functions) bypasses RLS entirely.
+--
+-- 4. Special anon access:
 --      - business_settings : anon SELECT (booking widget reads biz info)
 --      - jobs              : anon INSERT (booking widget creates jobs, RESTRICTED)
 --      - customer_portal_tokens : anon SELECT (portal auth, future table)
 --
--- 4. Tables that had RLS DISABLED in production (action_queue, call_logs,
+-- 5. Tables that had RLS DISABLED in production (action_queue, call_logs,
 --    message_logs) are explicitly enabled here.
---
--- 5. The old owner_id = auth.uid() pattern has been replaced with
---    TO authenticated USING (true). In a single-tenant internal app this
---    is simpler and avoids issues where Edge Functions or service_role
---    writes rows that the authenticated user then cannot read.
 --
 -- 6. Storage bucket policies (job-photos, job-signatures) are NOT included
 --    here. Manage storage policies via the Supabase Dashboard.
