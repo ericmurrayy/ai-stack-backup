@@ -1,172 +1,167 @@
 // Murray's FSM - Customer Portal
 // ===============================
-// Self-service portal for customers to view jobs, approve estimates, pay invoices
+// Self-service portal for customers to view jobs, approve estimates, and track service
 
 import { createClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { formatCents, formatRelativeTime } from '@/lib/utils';
+import { Button } from '@/components/ui/Button';
+import {
+  cn,
+  formatCents,
+  formatDate,
+  formatDateTime,
+  formatRelativeTime,
+  formatScheduleLabel,
+  jobStatusConfig,
+  serviceCategoryConfig,
+} from '@/lib/utils';
 import {
   Briefcase,
   FileText,
-  CreditCard,
   Calendar,
   CheckCircle,
   Clock,
   AlertCircle,
-  Download,
-  MessageSquare,
-  Star,
+  ArrowRight,
+  Phone,
+  Wrench,
+  Plus,
 } from 'lucide-react';
 import { notFound } from 'next/navigation';
 
-interface PortalData {
-  customer: {
-    id: string;
-    name: string;
-    email: string;
-    phone: string;
-  };
-  business: {
-    name: string;
-    phone: string;
-    email: string;
-    logo_url?: string;
-    primary_color: string;
-  };
-  jobs: Array<{
-    id: string;
-    title: string;
-    status: string;
-    scheduled_start: string;
-    total_cents: number;
-    paid_cents: number;
-  }>;
-  estimates: Array<{
-    id: string;
-    job_id: string;
-    job_title: string;
-    total_cents: number;
-    status: string;
-    created_at: string;
-  }>;
-  invoices: Array<{
-    id: string;
-    job_id: string;
-    job_title: string;
-    total_cents: number;
-    paid_cents: number;
-    due_date: string;
-  }>;
+// ---------- Types matching the live DB schema ----------
+
+interface Job {
+  id: string;
+  job_number: string;
+  customer_name: string | null;
+  phone_e164: string | null;
+  email: string | null;
+  city: string | null;
+  address: string | null;
+  service_category: string;
+  urgency: string;
+  issue_description: string | null;
+  scheduled_at: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
 }
 
-async function getPortalData(token: string): Promise<PortalData | null> {
+interface Estimate {
+  id: string;
+  job_id: string;
+  estimate_number: string;
+  status: string;
+  total_cents: number;
+  notes: string | null;
+  valid_until: string | null;
+  sent_at: string | null;
+  created_at: string;
+}
+
+interface PortalToken {
+  id: string;
+  customer_phone: string;
+  token: string;
+  expires_at: string;
+  created_at: string;
+}
+
+// ---------- Estimate status config ----------
+
+const estimateStatusConfig: Record<string, { label: string; variant: 'default' | 'success' | 'warning' | 'danger' | 'info' }> = {
+  draft: { label: 'Draft', variant: 'default' },
+  sent: { label: 'Awaiting Approval', variant: 'warning' },
+  approved: { label: 'Approved', variant: 'success' },
+  declined: { label: 'Declined', variant: 'danger' },
+  expired: { label: 'Expired', variant: 'default' },
+};
+
+// ---------- Job status badge variant mapping ----------
+
+const jobStatusVariant: Record<string, 'default' | 'success' | 'warning' | 'danger' | 'info'> = {
+  new: 'info',
+  contacted: 'info',
+  scheduled: 'info',
+  in_progress: 'warning',
+  completed: 'success',
+  cancelled: 'danger',
+  spam: 'default',
+};
+
+// Active job statuses (shown in the status tracker)
+const ACTIVE_STATUSES = ['new', 'contacted', 'scheduled', 'in_progress'];
+
+// Job status progression for the timeline
+const STATUS_STEPS = [
+  { key: 'new', label: 'Received' },
+  { key: 'contacted', label: 'Contacted' },
+  { key: 'scheduled', label: 'Scheduled' },
+  { key: 'in_progress', label: 'In Progress' },
+  { key: 'completed', label: 'Completed' },
+];
+
+// ---------- Data fetching ----------
+
+async function getPortalData(token: string) {
   const supabase = createClient();
 
-  // Verify token and get customer
+  // 1. Verify token from customer_portal_tokens
   const { data: portalToken } = await supabase
     .from('customer_portal_tokens')
-    .select('*, customer:customers(*)')
+    .select('id, customer_phone, token, expires_at, created_at')
     .eq('token', token)
-    .eq('is_active', true)
     .gt('expires_at', new Date().toISOString())
     .single();
 
   if (!portalToken) return null;
 
-  const customerId = portalToken.customer_id;
-  const ownerId = portalToken.customer.owner_id;
+  const customerPhone = portalToken.customer_phone;
 
-  // Get business settings
-  const { data: business } = await supabase
-    .from('business_settings')
-    .select('business_name, business_phone, business_email, business_logo_url, primary_color')
-    .eq('owner_id', ownerId)
-    .single();
-
-  // Get jobs
+  // 2. Get all jobs for this customer by phone_e164
   const { data: jobs } = await supabase
     .from('jobs')
-    .select('id, title, status, scheduled_start, total_cents, paid_cents')
-    .eq('customer_id', customerId)
-    .eq('deleted', false)
-    .order('scheduled_start', { ascending: false })
-    .limit(10);
+    .select('id, job_number, customer_name, phone_e164, email, city, address, service_category, urgency, issue_description, scheduled_at, status, created_at, updated_at')
+    .eq('phone_e164', customerPhone)
+    .order('created_at', { ascending: false })
+    .limit(50);
 
-  // Get pending estimates (line_items with kind='estimate')
-  const { data: jobsWithEstimates } = await supabase
-    .from('jobs')
-    .select(`
-      id, title,
-      line_items!inner(id, total_cents, created_at)
-    `)
-    .eq('customer_id', customerId)
-    .eq('line_items.kind', 'estimate')
-    .eq('estimate_status', 'pending')
-    .eq('deleted', false);
+  const allJobs: Job[] = jobs || [];
 
-  const estimates = (jobsWithEstimates || []).map(job => ({
-    id: job.line_items[0]?.id || job.id,
-    job_id: job.id,
-    job_title: job.title,
-    total_cents: job.line_items.reduce((sum: number, li: { total_cents: number }) => sum + li.total_cents, 0),
-    status: 'pending',
-    created_at: job.line_items[0]?.created_at,
-  }));
+  // 3. Get estimates for customer's jobs
+  let estimates: (Estimate & { job_number: string; service_category: string })[] = [];
+  if (allJobs.length > 0) {
+    const jobIds = allJobs.map(j => j.id);
+    const { data: estimateRows } = await supabase
+      .from('estimates')
+      .select('id, job_id, estimate_number, status, total_cents, notes, valid_until, sent_at, created_at')
+      .in('job_id', jobIds)
+      .order('created_at', { ascending: false });
 
-  // Get unpaid invoices
-  const { data: jobsWithInvoices } = await supabase
-    .from('jobs')
-    .select('id, title, total_cents, paid_cents, invoice_due_date')
-    .eq('customer_id', customerId)
-    .eq('deleted', false)
-    .gt('total_cents', 0)
-    .not('paid_cents', 'eq', supabase.rpc('get_total_cents'));
+    if (estimateRows) {
+      const jobMap = new Map(allJobs.map(j => [j.id, j]));
+      estimates = estimateRows.map(e => ({
+        ...e,
+        job_number: jobMap.get(e.job_id)?.job_number || '',
+        service_category: jobMap.get(e.job_id)?.service_category || 'general',
+      }));
+    }
+  }
 
-  const invoices = (jobsWithInvoices || [])
-    .filter(job => job.total_cents > (job.paid_cents || 0))
-    .map(job => ({
-      id: job.id,
-      job_id: job.id,
-      job_title: job.title,
-      total_cents: job.total_cents,
-      paid_cents: job.paid_cents || 0,
-      due_date: job.invoice_due_date,
-    }));
-
-  // Update last accessed
-  await supabase
-    .from('customer_portal_tokens')
-    .update({ last_accessed_at: new Date().toISOString() })
-    .eq('token', token);
+  // Derive the customer name from the most recent job
+  const customerName = allJobs.find(j => j.customer_name)?.customer_name || 'Customer';
 
   return {
-    customer: {
-      id: portalToken.customer.id,
-      name: portalToken.customer.name,
-      email: portalToken.customer.email,
-      phone: portalToken.customer.phone,
-    },
-    business: {
-      name: business?.business_name || 'Service Provider',
-      phone: business?.business_phone || '',
-      email: business?.business_email || '',
-      logo_url: business?.business_logo_url,
-      primary_color: business?.primary_color || '#1e40af',
-    },
-    jobs: jobs || [],
+    customerPhone,
+    customerName,
+    jobs: allJobs,
     estimates,
-    invoices,
   };
 }
 
-const statusColors: Record<string, string> = {
-  scheduled: 'bg-blue-100 text-blue-800',
-  in_progress: 'bg-yellow-100 text-yellow-800',
-  completed: 'bg-green-100 text-green-800',
-  canceled: 'bg-red-100 text-red-800',
-  pending: 'bg-orange-100 text-orange-800',
-};
+// ---------- Page component ----------
 
 export default async function CustomerPortalPage({
   params,
@@ -179,55 +174,46 @@ export default async function CustomerPortalPage({
     notFound();
   }
 
-  const { customer, business, jobs, estimates, invoices } = data;
+  const { customerPhone, customerName, jobs, estimates } = data;
 
-  const upcomingJobs = jobs.filter(j => new Date(j.scheduled_start) > new Date());
-  const pendingEstimates = estimates.filter(e => e.status === 'pending');
-  const unpaidInvoices = invoices.filter(i => i.total_cents > i.paid_cents);
-  const totalOwed = unpaidInvoices.reduce((sum, i) => sum + (i.total_cents - i.paid_cents), 0);
+  // Derived data
+  const activeJobs = jobs.filter(j => ACTIVE_STATUSES.includes(j.status));
+  const completedJobs = jobs.filter(j => j.status === 'completed');
+  const actionableEstimates = estimates.filter(e => e.status === 'sent');
+  const allEstimates = estimates.filter(e => e.status !== 'draft');
 
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
-      <header
-        className="bg-white border-b border-slate-200 px-6 py-4"
-        style={{ borderTopColor: business.primary_color, borderTopWidth: '4px' }}
-      >
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
+      <header className="bg-white border-b border-slate-200 border-t-4 border-t-primary-800">
+        <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            {business.logo_url ? (
-              <img src={business.logo_url} alt={business.name} className="h-10" />
-            ) : (
-              <div
-                className="w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold"
-                style={{ backgroundColor: business.primary_color }}
-              >
-                {business.name.charAt(0)}
-              </div>
-            )}
+            <div className="w-10 h-10 rounded-lg bg-primary-800 flex items-center justify-center text-white font-bold">
+              M
+            </div>
             <div>
-              <h1 className="font-semibold text-slate-900">{business.name}</h1>
+              <h1 className="font-semibold text-slate-900">Murray&apos;s FSM</h1>
               <p className="text-sm text-slate-500">Customer Portal</p>
             </div>
           </div>
           <div className="text-right text-sm">
-            <p className="text-slate-900 font-medium">Welcome, {customer.name}</p>
-            <p className="text-slate-500">{customer.email}</p>
+            <p className="text-slate-900 font-medium">Welcome, {customerName}</p>
+            <p className="text-slate-500">{customerPhone}</p>
           </div>
         </div>
       </header>
 
       <main className="max-w-4xl mx-auto p-6 space-y-6">
         {/* Quick Stats */}
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <Card className="p-4">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-blue-50">
-                <Calendar className="w-5 h-5 text-blue-600" />
+                <Clock className="w-5 h-5 text-blue-600" />
               </div>
               <div>
-                <div className="text-2xl font-bold text-slate-900">{upcomingJobs.length}</div>
-                <div className="text-sm text-slate-500">Upcoming</div>
+                <div className="text-2xl font-bold text-slate-900">{activeJobs.length}</div>
+                <div className="text-sm text-slate-500">Active Jobs</div>
               </div>
             </div>
           </Card>
@@ -237,19 +223,8 @@ export default async function CustomerPortalPage({
                 <FileText className="w-5 h-5 text-yellow-600" />
               </div>
               <div>
-                <div className="text-2xl font-bold text-slate-900">{pendingEstimates.length}</div>
+                <div className="text-2xl font-bold text-slate-900">{actionableEstimates.length}</div>
                 <div className="text-sm text-slate-500">Pending Estimates</div>
-              </div>
-            </div>
-          </Card>
-          <Card className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-red-50">
-                <CreditCard className="w-5 h-5 text-red-600" />
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-slate-900">{unpaidInvoices.length}</div>
-                <div className="text-sm text-slate-500">Unpaid Invoices</div>
               </div>
             </div>
           </Card>
@@ -259,181 +234,303 @@ export default async function CustomerPortalPage({
                 <Briefcase className="w-5 h-5 text-green-600" />
               </div>
               <div>
-                <div className="text-2xl font-bold text-slate-900">{jobs.length}</div>
-                <div className="text-sm text-slate-500">Total Jobs</div>
+                <div className="text-2xl font-bold text-slate-900">{completedJobs.length}</div>
+                <div className="text-sm text-slate-500">Completed</div>
               </div>
             </div>
           </Card>
         </div>
 
-        {/* Action Required */}
-        {(pendingEstimates.length > 0 || totalOwed > 0) && (
+        {/* Action Required Banner */}
+        {actionableEstimates.length > 0 && (
           <Card className="p-4 bg-amber-50 border-amber-200">
             <div className="flex items-center gap-3">
-              <AlertCircle className="w-5 h-5 text-amber-600" />
+              <AlertCircle className="w-5 h-5 text-amber-600 shrink-0" />
               <div className="flex-1">
                 <h3 className="font-medium text-amber-800">Action Required</h3>
                 <p className="text-sm text-amber-700">
-                  {pendingEstimates.length > 0 && `${pendingEstimates.length} estimate(s) awaiting your approval. `}
-                  {totalOwed > 0 && `Outstanding balance: ${formatCents(totalOwed)}`}
+                  You have {actionableEstimates.length} estimate{actionableEstimates.length > 1 ? 's' : ''} awaiting your approval.
                 </p>
               </div>
-              {totalOwed > 0 && (
-                <button
-                  className="px-4 py-2 text-sm font-medium text-white rounded-lg"
-                  style={{ backgroundColor: business.primary_color }}
-                >
-                  Pay Now
-                </button>
-              )}
+              <a href="#estimates">
+                <Button size="sm" variant="outline">
+                  View Estimates
+                </Button>
+              </a>
             </div>
           </Card>
         )}
 
-        {/* Pending Estimates */}
-        {pendingEstimates.length > 0 && (
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900 mb-4">Estimates Awaiting Approval</h2>
-            <div className="space-y-3">
-              {pendingEstimates.map((estimate) => (
-                <Card key={estimate.id} className="p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="font-medium text-slate-900">{estimate.job_title}</h3>
-                      <p className="text-sm text-slate-500">
-                        Sent {formatRelativeTime(estimate.created_at)}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <span className="text-lg font-semibold text-slate-900">
-                        {formatCents(estimate.total_cents)}
-                      </span>
-                      <div className="flex gap-2">
-                        <button className="px-3 py-1.5 text-sm font-medium text-red-700 bg-red-50 rounded-lg hover:bg-red-100">
-                          Decline
-                        </button>
-                        <button
-                          className="px-3 py-1.5 text-sm font-medium text-white rounded-lg"
-                          style={{ backgroundColor: business.primary_color }}
-                        >
-                          Approve
-                        </button>
+        {/* Active Job Status Tracking */}
+        {activeJobs.length > 0 && (
+          <section>
+            <h2 className="text-lg font-semibold text-slate-900 mb-4">Active Jobs</h2>
+            <div className="space-y-4">
+              {activeJobs.map((job) => {
+                const categoryInfo = serviceCategoryConfig[job.service_category] || serviceCategoryConfig.general;
+                const statusInfo = jobStatusConfig[job.status] || jobStatusConfig.new;
+                const currentStepIndex = STATUS_STEPS.findIndex(s => s.key === job.status);
+
+                return (
+                  <Card key={job.id} padding="none">
+                    {/* Job header */}
+                    <div className="p-4 border-b border-slate-100">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 rounded-lg bg-slate-50">
+                            <Wrench className="w-5 h-5 text-slate-600" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-medium text-slate-900">
+                                Job #{job.job_number}
+                              </h3>
+                              <Badge className={categoryInfo.color}>
+                                {categoryInfo.label}
+                              </Badge>
+                            </div>
+                            {job.issue_description && (
+                              <p className="text-sm text-slate-500 mt-0.5 line-clamp-1">
+                                {job.issue_description}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <Badge variant={jobStatusVariant[job.status] || 'default'}>
+                            {statusInfo.label}
+                          </Badge>
+                          {job.scheduled_at && (
+                            <p className="text-xs text-slate-500 mt-1">
+                              {formatScheduleLabel(job.scheduled_at)}
+                            </p>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </Card>
-              ))}
+
+                    {/* Status timeline */}
+                    <div className="px-4 py-3">
+                      <div className="flex items-center justify-between">
+                        {STATUS_STEPS.map((step, i) => {
+                          const isCompleted = i < currentStepIndex;
+                          const isCurrent = i === currentStepIndex;
+                          const isFuture = i > currentStepIndex;
+
+                          return (
+                            <div key={step.key} className="flex items-center flex-1 last:flex-none">
+                              <div className="flex flex-col items-center">
+                                <div
+                                  className={cn(
+                                    'w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium',
+                                    isCompleted && 'bg-green-500 text-white',
+                                    isCurrent && 'bg-primary-800 text-white ring-2 ring-primary-200',
+                                    isFuture && 'bg-slate-200 text-slate-400'
+                                  )}
+                                >
+                                  {isCompleted ? (
+                                    <CheckCircle className="w-4 h-4" />
+                                  ) : (
+                                    i + 1
+                                  )}
+                                </div>
+                                <span
+                                  className={cn(
+                                    'text-[10px] mt-1 whitespace-nowrap',
+                                    isCurrent ? 'text-slate-900 font-medium' : 'text-slate-400'
+                                  )}
+                                >
+                                  {step.label}
+                                </span>
+                              </div>
+                              {i < STATUS_STEPS.length - 1 && (
+                                <div
+                                  className={cn(
+                                    'flex-1 h-0.5 mx-1 mt-[-14px]',
+                                    i < currentStepIndex ? 'bg-green-400' : 'bg-slate-200'
+                                  )}
+                                />
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Job details row */}
+                    <div className="px-4 pb-3 flex items-center gap-4 text-xs text-slate-500">
+                      {job.city && (
+                        <span className="flex items-center gap-1">
+                          <Calendar className="w-3 h-3" />
+                          {job.city}
+                        </span>
+                      )}
+                      <span>Created {formatRelativeTime(job.created_at)}</span>
+                    </div>
+                  </Card>
+                );
+              })}
             </div>
-          </div>
+          </section>
         )}
 
-        {/* Unpaid Invoices */}
-        {unpaidInvoices.length > 0 && (
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900 mb-4">Invoices</h2>
+        {/* Estimates Section */}
+        {allEstimates.length > 0 && (
+          <section id="estimates">
+            <h2 className="text-lg font-semibold text-slate-900 mb-4">Estimates</h2>
+            <div className="space-y-3">
+              {allEstimates.map((estimate) => {
+                const estConfig = estimateStatusConfig[estimate.status] || estimateStatusConfig.draft;
+                const categoryInfo = serviceCategoryConfig[estimate.service_category] || serviceCategoryConfig.general;
+                const isActionable = estimate.status === 'sent';
+                const isExpired = estimate.valid_until && new Date(estimate.valid_until) < new Date();
+
+                return (
+                  <Card key={estimate.id} className={cn('p-4', isActionable && 'border-amber-200 bg-amber-50/30')}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className={cn('p-2 rounded-lg', isActionable ? 'bg-amber-100' : 'bg-slate-50')}>
+                          <FileText className={cn('w-5 h-5', isActionable ? 'text-amber-600' : 'text-slate-500')} />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-medium text-slate-900">
+                              Estimate #{estimate.estimate_number}
+                            </h3>
+                            <Badge className={categoryInfo.color}>
+                              {categoryInfo.label}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center gap-3 text-sm text-slate-500 mt-0.5">
+                            <span>Job #{estimate.job_number}</span>
+                            {estimate.valid_until && (
+                              <span>
+                                {isExpired
+                                  ? 'Expired'
+                                  : `Valid until ${formatDate(estimate.valid_until)}`}
+                              </span>
+                            )}
+                            {estimate.sent_at && (
+                              <span>Sent {formatRelativeTime(estimate.sent_at)}</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4 shrink-0">
+                        <div className="text-right">
+                          <span className="text-lg font-semibold text-slate-900">
+                            {formatCents(estimate.total_cents)}
+                          </span>
+                          <div className="mt-0.5">
+                            <Badge variant={estConfig.variant}>
+                              {estConfig.label}
+                            </Badge>
+                          </div>
+                        </div>
+                        {isActionable && !isExpired && (
+                          <div className="flex gap-2">
+                            <Button size="sm" variant="danger">
+                              Decline
+                            </Button>
+                            <Button size="sm" variant="primary">
+                              Approve
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {/* Job History */}
+        <section>
+          <h2 className="text-lg font-semibold text-slate-900 mb-4">Service History</h2>
+          {jobs.length === 0 ? (
+            <Card className="p-8 text-center">
+              <Briefcase className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+              <p className="text-slate-500">No service history yet.</p>
+            </Card>
+          ) : (
             <Card padding="none">
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50">
                     <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">
+                      Job
+                    </th>
+                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">
                       Service
                     </th>
-                    <th className="text-right px-4 py-3 text-xs font-medium text-slate-500 uppercase">
-                      Amount
+                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">
+                      Status
                     </th>
-                    <th className="text-right px-4 py-3 text-xs font-medium text-slate-500 uppercase">
-                      Paid
+                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">
+                      Scheduled
                     </th>
-                    <th className="text-right px-4 py-3 text-xs font-medium text-slate-500 uppercase">
-                      Balance
+                    <th className="text-left px-4 py-3 text-xs font-medium text-slate-500 uppercase">
+                      Location
                     </th>
-                    <th className="px-4 py-3"></th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {unpaidInvoices.map((invoice) => (
-                    <tr key={invoice.id} className="hover:bg-slate-50">
-                      <td className="px-4 py-3 text-slate-900">{invoice.job_title}</td>
-                      <td className="px-4 py-3 text-right text-slate-600">
-                        {formatCents(invoice.total_cents)}
-                      </td>
-                      <td className="px-4 py-3 text-right text-slate-600">
-                        {formatCents(invoice.paid_cents)}
-                      </td>
-                      <td className="px-4 py-3 text-right font-medium text-slate-900">
-                        {formatCents(invoice.total_cents - invoice.paid_cents)}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <button
-                          className="px-3 py-1 text-sm font-medium text-white rounded"
-                          style={{ backgroundColor: business.primary_color }}
-                        >
-                          Pay
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                <tbody className="divide-y divide-slate-100">
+                  {jobs.map((job) => {
+                    const categoryInfo = serviceCategoryConfig[job.service_category] || serviceCategoryConfig.general;
+                    const statusInfo = jobStatusConfig[job.status] || jobStatusConfig.new;
+                    return (
+                      <tr key={job.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-4 py-3">
+                          <div className="font-medium text-slate-900">#{job.job_number}</div>
+                          {job.issue_description && (
+                            <p className="text-xs text-slate-500 mt-0.5 line-clamp-1 max-w-[200px]">
+                              {job.issue_description}
+                            </p>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <Badge className={categoryInfo.color}>{categoryInfo.label}</Badge>
+                        </td>
+                        <td className="px-4 py-3">
+                          <Badge variant={jobStatusVariant[job.status] || 'default'}>
+                            {statusInfo.label}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-600">
+                          {job.scheduled_at
+                            ? formatScheduleLabel(job.scheduled_at)
+                            : <span className="text-slate-400">Not scheduled</span>
+                          }
+                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-600">
+                          {job.city || <span className="text-slate-400">&mdash;</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </Card>
-          </div>
-        )}
+          )}
+        </section>
 
-        {/* Job History */}
-        <div>
-          <h2 className="text-lg font-semibold text-slate-900 mb-4">Service History</h2>
-          <div className="space-y-3">
-            {jobs.map((job) => (
-              <Card key={job.id} className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    {job.status === 'completed' ? (
-                      <CheckCircle className="w-5 h-5 text-green-500" />
-                    ) : job.status === 'in_progress' ? (
-                      <Clock className="w-5 h-5 text-yellow-500" />
-                    ) : (
-                      <Calendar className="w-5 h-5 text-blue-500" />
-                    )}
-                    <div>
-                      <h3 className="font-medium text-slate-900">{job.title}</h3>
-                      <p className="text-sm text-slate-500">
-                        {new Date(job.scheduled_start).toLocaleDateString('en-US', {
-                          weekday: 'short',
-                          month: 'short',
-                          day: 'numeric',
-                          hour: 'numeric',
-                          minute: '2-digit',
-                        })}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <Badge className={statusColors[job.status] || 'bg-slate-100 text-slate-800'}>
-                      {job.status.replace('_', ' ')}
-                    </Badge>
-                    {job.total_cents > 0 && (
-                      <span className="font-medium text-slate-900">
-                        {formatCents(job.total_cents)}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
-        </div>
-
-        {/* Book New Service */}
+        {/* Book New Service CTA */}
         <Card className="p-6 text-center">
-          <Calendar className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-          <h3 className="text-lg font-semibold text-slate-900 mb-2">Need Service?</h3>
-          <p className="text-slate-500 mb-4">Schedule a new appointment online</p>
-          <button
-            className="px-6 py-2 text-sm font-medium text-white rounded-lg"
-            style={{ backgroundColor: business.primary_color }}
-          >
-            Book Appointment
-          </button>
+          <div className="flex flex-col items-center">
+            <div className="p-3 rounded-full bg-primary-50 mb-3">
+              <Plus className="w-6 h-6 text-primary-800" />
+            </div>
+            <h3 className="text-lg font-semibold text-slate-900 mb-2">Need Service?</h3>
+            <p className="text-slate-500 mb-4">Schedule a new appointment or request a quote</p>
+            <a href="/book">
+              <Button size="lg">
+                Book New Service
+                <ArrowRight className="w-4 h-4 ml-1" />
+              </Button>
+            </a>
+          </div>
         </Card>
 
         {/* Contact */}
@@ -442,13 +539,15 @@ export default async function CustomerPortalPage({
             <div>
               <h3 className="font-medium text-slate-900">Need Help?</h3>
               <p className="text-sm text-slate-500">
-                Contact us at {business.phone} or {business.email}
+                Give us a call if you have any questions about your service.
               </p>
             </div>
-            <button className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 flex items-center gap-2">
-              <MessageSquare className="w-4 h-4" />
-              Message Us
-            </button>
+            <a href="tel:+1" className="shrink-0">
+              <Button variant="outline" size="sm">
+                <Phone className="w-4 h-4" />
+                Call Us
+              </Button>
+            </a>
           </div>
         </Card>
       </main>

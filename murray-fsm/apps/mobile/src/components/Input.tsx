@@ -26,8 +26,8 @@ export const Input = forwardRef<TextInput, InputProps>(
           ref={ref}
           style={[
             styles.input,
-            error && styles.inputError,
-            props.multiline && styles.multiline,
+            error ? styles.inputError : undefined,
+            props.multiline ? styles.multiline : undefined,
             style,
           ]}
           placeholderTextColor="#94a3b8"

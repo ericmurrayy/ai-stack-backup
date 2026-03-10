@@ -4,6 +4,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/Card';
+import { serviceCategoryConfig } from '@/lib/utils';
 import {
   Calendar,
   Clock,
@@ -14,6 +15,15 @@ import {
   ChevronRight,
   CheckCircle,
   Wrench,
+  Droplets,
+  Zap,
+  Wind,
+  Settings,
+  Trees,
+  Sparkles,
+  Paintbrush,
+  Home,
+  HelpCircle,
 } from 'lucide-react';
 import { notFound } from 'next/navigation';
 
@@ -67,27 +77,56 @@ async function getBusinessData(businessId: string): Promise<BusinessData | null>
     secondary_color: settings.secondary_color || '#3b82f6',
     business_hours: settings.business_hours || [],
     default_job_duration_minutes: settings.default_job_duration_minutes || 120,
-    service_types: ['repair', 'installation', 'maintenance', 'inspection'],
+    service_types: ['plumbing', 'electrical', 'hvac', 'general', 'landscaping', 'cleaning', 'painting', 'roofing', 'other'],
     service_areas: [],
   };
 }
 
-const SERVICE_TYPE_LABELS: Record<string, { label: string; description: string }> = {
-  repair: {
-    label: 'Repair Service',
-    description: 'Fix an existing issue with your garage door',
+const SERVICE_TYPE_LABELS: Record<string, { label: string; description: string; icon: typeof Wrench }> = {
+  plumbing: {
+    label: 'Plumbing',
+    description: 'Pipe repairs, drain cleaning, water heater service, and more',
+    icon: Droplets,
   },
-  installation: {
-    label: 'New Installation',
-    description: 'Install a new garage door or opener',
+  electrical: {
+    label: 'Electrical',
+    description: 'Wiring, outlets, panel upgrades, lighting, and electrical repairs',
+    icon: Zap,
   },
-  maintenance: {
-    label: 'Maintenance',
-    description: 'Preventive maintenance and tune-up',
+  hvac: {
+    label: 'HVAC',
+    description: 'Heating, ventilation, air conditioning installation and repair',
+    icon: Wind,
   },
-  inspection: {
-    label: 'Safety Inspection',
-    description: 'Full safety inspection and report',
+  general: {
+    label: 'General',
+    description: 'General maintenance, handyman services, and miscellaneous repairs',
+    icon: Settings,
+  },
+  landscaping: {
+    label: 'Landscaping',
+    description: 'Lawn care, garden design, tree trimming, and outdoor maintenance',
+    icon: Trees,
+  },
+  cleaning: {
+    label: 'Cleaning',
+    description: 'Deep cleaning, regular maintenance cleaning, and specialty services',
+    icon: Sparkles,
+  },
+  painting: {
+    label: 'Painting',
+    description: 'Interior and exterior painting, staining, and wall treatments',
+    icon: Paintbrush,
+  },
+  roofing: {
+    label: 'Roofing',
+    description: 'Roof repair, replacement, inspection, and gutter services',
+    icon: Home,
+  },
+  other: {
+    label: 'Other',
+    description: 'Other services not listed above',
+    icon: HelpCircle,
   },
 };
 
@@ -171,7 +210,8 @@ export default async function BookingPage({
             <h2 className="text-lg font-semibold text-slate-900 mb-4">What service do you need?</h2>
             <div className="space-y-3">
               {business.service_types.map((type) => {
-                const info = SERVICE_TYPE_LABELS[type] || { label: type, description: '' };
+                const info = SERVICE_TYPE_LABELS[type] || { label: type, description: '', icon: Wrench };
+                const IconComponent = info.icon;
                 return (
                   <Card
                     key={type}
@@ -182,7 +222,7 @@ export default async function BookingPage({
                         className="p-3 rounded-lg"
                         style={{ backgroundColor: `${business.primary_color}15` }}
                       >
-                        <Wrench className="w-6 h-6" style={{ color: business.primary_color }} />
+                        <IconComponent className="w-6 h-6" style={{ color: business.primary_color }} />
                       </div>
                       <div className="flex-1">
                         <h3 className="font-medium text-slate-900">{info.label}</h3>

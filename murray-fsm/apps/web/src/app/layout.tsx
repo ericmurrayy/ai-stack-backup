@@ -7,6 +7,15 @@ import './globals.css';
 export const metadata: Metadata = {
   title: "Murray's FSM - Field Service Management",
   description: 'Offline-first field service management for garage door operators',
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Murray's FSM",
+  },
+  formatDetection: {
+    telephone: false,
+  },
 };
 
 export default function RootLayout({

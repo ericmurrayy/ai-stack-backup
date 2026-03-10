@@ -5,14 +5,17 @@
   "main": "src/index.ts",
   "types": "src/index.ts",
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@murray-fsm/shared": "workspace:*",
     "date-fns": "^3.6.0"
   },
   "devDependencies": {
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "vitest": "^3.0.0"
   },
   "peerDependencies": {
     "@supabase/supabase-js": "^2.43.0"

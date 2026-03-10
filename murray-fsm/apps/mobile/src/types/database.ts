@@ -1,10 +1,12 @@
 // Murray's FSM - Database Types
 // ==============================
 
-export type JobStatus = 'scheduled' | 'in_progress' | 'completed' | 'canceled';
+export type JobStatus = 'new' | 'contacted' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled' | 'spam';
+export type ServiceCategory = 'plumbing' | 'electrical' | 'hvac' | 'general' | 'landscaping' | 'cleaning' | 'painting' | 'roofing' | 'other';
+export type Urgency = 'low' | 'medium' | 'high' | 'emergency';
+export type Priority = 'low' | 'normal' | 'high' | 'urgent';
+export type EstimateStatus = 'draft' | 'sent' | 'approved' | 'rejected' | 'expired';
 export type PhotoKind = 'before' | 'after' | 'other';
-export type LineItemKind = 'estimate' | 'invoice';
-export type PaymentStatus = 'pending' | 'processing' | 'succeeded' | 'failed' | 'canceled' | 'refunded';
 export type CallDirection = 'inbound' | 'outbound';
 export type MessageDirection = 'inbound' | 'outbound';
 export type ActionStatus = 'pending' | 'approved' | 'rejected' | 'executed' | 'failed';
@@ -54,27 +56,33 @@ export interface Location {
 
 export interface Job {
   id: string;
-  owner_id: string;
-  customer_id: string;
-  location_id: string | null;
-  title: string;
-  service_type: string | null;
-  problem_description: string | null;
+  job_number: string | null;
+  phone_number: string | null;
+  phone_e164: string | null;
+  customer_name: string | null;
+  email: string | null;
+  city: string | null;
+  address: string | null;
+  zip_code: string | null;
+  service_category: ServiceCategory | null;
+  urgency: Urgency | null;
+  issue_description: string | null;
+  preferred_time: string | null;
+  scheduled_at: string | null;
   status: JobStatus;
-  scheduled_start: string | null;
-  scheduled_end: string | null;
-  arrived_at: string | null;
-  started_at: string | null;
-  completed_at: string | null;
-  internal_notes: string | null;
-  customer_notes: string | null;
-  diagnostics: Record<string, any>;
-  total_estimate_cents: number;
-  total_invoice_cents: number;
-  paid_cents: number;
+  is_spam: boolean | null;
+  spam_reason: string | null;
+  extraction_confidence: number | null;
+  recommended_action: string | null;
+  source_event_id: string | null;
+  assigned_technician_id: string | null;
+  priority: Priority | null;
+  source: string | null;
+  recurring_job_id: string | null;
+  estimate_id: string | null;
   created_at: string;
   updated_at: string;
-  deleted: boolean;
+  closed_at: string | null;
 }
 
 export interface JobEvent {
@@ -123,34 +131,57 @@ export interface JobSignature {
   pending_upload?: boolean;
 }
 
-export interface LineItem {
+export interface Technician {
   id: string;
-  owner_id: string;
-  job_id: string;
-  kind: LineItemKind;
   name: string;
-  description: string | null;
-  qty: number;
-  unit_price_cents: number;
-  total_cents: number;
-  sort_order: number;
+  email: string | null;
+  phone: string | null;
+  color: string | null;
+  role: string | null;
+  is_active: boolean;
   created_at: string;
   updated_at: string;
-  deleted: boolean;
 }
 
-export interface Payment {
+export interface InventoryItem {
   id: string;
-  owner_id: string;
-  job_id: string;
-  provider: string;
-  stripe_payment_intent_id: string | null;
-  amount_cents: number;
-  status: PaymentStatus;
-  metadata: Record<string, any>;
+  name: string;
+  sku: string | null;
+  description: string | null;
+  category: string | null;
+  unit_cost_cents: number | null;
+  sell_price_cents: number | null;
+  quantity_on_hand: number;
+  reorder_point: number | null;
+  supplier: string | null;
+  is_active: boolean;
   created_at: string;
   updated_at: string;
-  deleted: boolean;
+}
+
+export interface Notification {
+  id: string;
+  user_id: string | null;
+  title: string;
+  body: string | null;
+  type: string | null;
+  is_read: boolean;
+  data: Record<string, any> | null;
+  created_at: string;
+}
+
+export interface Estimate {
+  id: string;
+  job_id: string | null;
+  estimate_number: string | null;
+  status: EstimateStatus | null;
+  total_cents: number | null;
+  notes: string | null;
+  valid_until: string | null;
+  approved_at: string | null;
+  sent_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface CommThread {
@@ -245,12 +276,3 @@ export interface CalendarEvent {
   deleted: boolean;
 }
 
-// Joined types for convenience
-export interface JobWithRelations extends Job {
-  customer?: Customer;
-  location?: Location;
-  line_items?: LineItem[];
-  photos?: JobPhoto[];
-  signatures?: JobSignature[];
-  payments?: Payment[];
-}

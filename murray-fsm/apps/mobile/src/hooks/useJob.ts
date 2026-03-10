@@ -116,7 +116,7 @@ export const useJob = (jobId: string) => {
   };
 
   // Add line item
-  const addLineItem = (item: Omit<LineItem, 'id' | 'owner_id' | 'created_at' | 'updated_at' | 'deleted' | 'total_cents'>) => {
+  const addLineItem = (item: Omit<LineItem, 'id' | 'owner_id' | 'created_at' | 'updated_at' | 'deleted' | 'total_cents' | 'job_id'>) => {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     const ownerId = appState$.currentUserId.get();

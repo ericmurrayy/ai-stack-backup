@@ -15,8 +15,10 @@ import type {
   JobEvent,
   JobPhoto,
   JobSignature,
-  LineItem,
-  Payment,
+  Technician,
+  InventoryItem,
+  Notification,
+  Estimate,
   ActionQueueItem,
   CalendarEvent,
 } from '../types';
@@ -24,10 +26,9 @@ import type {
 // Configure Legend-State for persistence
 configureSynced({
   persist: {
-    plugin: ObservablePersistAsyncStorage,
-    asyncStorage: {
+    plugin: new ObservablePersistAsyncStorage({
       AsyncStorage,
-    },
+    }),
   },
 });
 
@@ -48,21 +49,18 @@ export const authState$ = observable({
 });
 
 // Generate sync configuration for a table
-const createSupabaseSync = <T extends { id: string; updated_at: string }>(
+const createSupabaseSync = <T extends { id: string }>(
   tableName: string,
   options?: {
-    filter?: (item: T) => boolean;
-    transform?: (item: any) => T;
+    fieldUpdatedAt?: string | false;
+    fieldDeleted?: string | false;
   }
 ) => {
   return syncedSupabase({
     supabase,
     collection: tableName,
-    select: (from) => from.select('*').eq('deleted', false),
-    filter: options?.filter,
-    transform: options?.transform,
     actions: ['read', 'create', 'update', 'delete'],
-    realtime: { enabled: true },
+    realtime: {},
     persist: {
       name: `fsm_${tableName}`,
       retrySync: true,
@@ -74,8 +72,8 @@ const createSupabaseSync = <T extends { id: string; updated_at: string }>(
     },
     changesSince: 'last-sync',
     fieldCreatedAt: 'created_at',
-    fieldUpdatedAt: 'updated_at',
-    fieldDeleted: 'deleted',
+    fieldUpdatedAt: options?.fieldUpdatedAt !== false ? (options?.fieldUpdatedAt ?? 'updated_at') : undefined,
+    fieldDeleted: options?.fieldDeleted !== false ? (options?.fieldDeleted ?? 'deleted') : undefined,
   });
 };
 
@@ -127,18 +125,34 @@ export const jobSignatures$ = observable<Record<string, JobSignature>>(
   })
 );
 
-// Line Items store
-export const lineItems$ = observable<Record<string, LineItem>>(
+// Technicians store
+export const technicians$ = observable<Record<string, Technician>>(
   synced({
-    ...createSupabaseSync<LineItem>('line_items'),
+    ...createSupabaseSync<Technician>('technicians', { fieldDeleted: false }),
     initial: {},
   })
 );
 
-// Payments store
-export const payments$ = observable<Record<string, Payment>>(
+// Inventory Items store
+export const inventoryItems$ = observable<Record<string, InventoryItem>>(
   synced({
-    ...createSupabaseSync<Payment>('payments'),
+    ...createSupabaseSync<InventoryItem>('inventory_items', { fieldDeleted: false }),
+    initial: {},
+  })
+);
+
+// Notifications store
+export const notifications$ = observable<Record<string, Notification>>(
+  synced({
+    ...createSupabaseSync<Notification>('notifications', { fieldUpdatedAt: false, fieldDeleted: false }),
+    initial: {},
+  })
+);
+
+// Estimates store
+export const estimates$ = observable<Record<string, Estimate>>(
+  synced({
+    ...createSupabaseSync<Estimate>('estimates', { fieldDeleted: false }),
     initial: {},
   })
 );
@@ -198,8 +212,8 @@ export const getJobsForToday = () => {
   tomorrow.setDate(tomorrow.getDate() + 1);
 
   return Object.values(jobs$.get() || {}).filter((job) => {
-    if (!job.scheduled_start) return false;
-    const scheduledDate = new Date(job.scheduled_start);
+    if (!job.scheduled_at) return false;
+    const scheduledDate = new Date(job.scheduled_at);
     return scheduledDate >= today && scheduledDate < tomorrow;
   });
 };
@@ -212,13 +226,13 @@ export const getUpcomingJobs = (days = 7) => {
 
   return Object.values(jobs$.get() || {})
     .filter((job) => {
-      if (!job.scheduled_start) return false;
-      const scheduledDate = new Date(job.scheduled_start);
+      if (!job.scheduled_at) return false;
+      const scheduledDate = new Date(job.scheduled_at);
       return scheduledDate >= today && scheduledDate <= endDate;
     })
     .sort((a, b) => {
-      const dateA = new Date(a.scheduled_start!);
-      const dateB = new Date(b.scheduled_start!);
+      const dateA = new Date(a.scheduled_at!);
+      const dateB = new Date(b.scheduled_at!);
       return dateA.getTime() - dateB.getTime();
     });
 };
@@ -233,24 +247,6 @@ export const getLocationsByCustomer = (customerId: string) => {
   );
 };
 
-export const getLineItemsByJob = (jobId: string) => {
-  return Object.values(lineItems$.get() || {}).filter(
-    (item) => item.job_id === jobId
-  );
-};
-
-export const getEstimateLineItems = (jobId: string) => {
-  return getLineItemsByJob(jobId)
-    .filter((item) => item.kind === 'estimate')
-    .sort((a, b) => a.sort_order - b.sort_order);
-};
-
-export const getInvoiceLineItems = (jobId: string) => {
-  return getLineItemsByJob(jobId)
-    .filter((item) => item.kind === 'invoice')
-    .sort((a, b) => a.sort_order - b.sort_order);
-};
-
 export const getPhotosByJob = (jobId: string) => {
   return Object.values(jobPhotos$.get() || {}).filter(
     (photo) => photo.job_id === jobId
@@ -263,9 +259,29 @@ export const getSignaturesByJob = (jobId: string) => {
   );
 };
 
-export const getPaymentsByJob = (jobId: string) => {
-  return Object.values(payments$.get() || {}).filter(
-    (payment) => payment.job_id === jobId
+export const getEstimatesByJob = (jobId: string) => {
+  return Object.values(estimates$.get() || {}).filter(
+    (estimate) => estimate.job_id === jobId
+  );
+};
+
+export const getTechnicianById = (id: string) => technicians$[id];
+
+export const getActiveTechnicians = () => {
+  return Object.values(technicians$.get() || {}).filter(
+    (tech) => tech.is_active
+  );
+};
+
+export const getUnreadNotifications = () => {
+  return Object.values(notifications$.get() || {}).filter(
+    (n) => !n.is_read
+  );
+};
+
+export const getInventoryLowStock = () => {
+  return Object.values(inventoryItems$.get() || {}).filter(
+    (item) => item.is_active && item.reorder_point != null && item.quantity_on_hand <= item.reorder_point
   );
 };
 
