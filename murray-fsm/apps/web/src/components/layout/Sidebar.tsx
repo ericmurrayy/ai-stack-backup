@@ -61,6 +61,7 @@ const businessNavigation = [
 const operationsNavigation = [
   { name: 'Team', href: '/team', icon: UserCog },
   { name: 'Performance', href: '/performance', icon: Trophy },
+  { name: 'Automations', href: '/automations', icon: Bot },
   { name: 'Inventory', href: '/inventory', icon: Package },
   { name: 'Recurring', href: '/recurring', icon: Repeat },
   { name: 'Agreements', href: '/agreements', icon: FileCheck },
