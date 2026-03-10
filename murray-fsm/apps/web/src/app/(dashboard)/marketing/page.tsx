@@ -51,7 +51,7 @@ interface Referral {
 }
 
 async function getMarketingData() {
-  const supabase = await createClient();
+  const supabase = createClient();
 
   const { data } = await supabase
     .from('campaigns')

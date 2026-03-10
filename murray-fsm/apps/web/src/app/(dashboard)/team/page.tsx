@@ -49,53 +49,7 @@ async function getTeamData(): Promise<TeamMember[]> {
     .order('name');
 
   if (!members?.length) {
-    return [
-      {
-        id: '1',
-        name: 'Mike Johnson',
-        email: 'mike@example.com',
-        phone: '+15551234567',
-        role: 'technician',
-        color: '#3b82f6',
-        skills: ['springs', 'repair', 'openers'],
-        is_active: true,
-        hourly_rate_cents: 2500,
-        jobs_today: 3,
-        jobs_this_week: 12,
-        revenue_this_month: 875000,
-        avg_rating: 4.8,
-      },
-      {
-        id: '2',
-        name: 'Sarah Williams',
-        email: 'sarah@example.com',
-        phone: '+15559876543',
-        role: 'technician',
-        color: '#22c55e',
-        skills: ['installation', 'panels'],
-        is_active: true,
-        hourly_rate_cents: 2800,
-        jobs_today: 2,
-        jobs_this_week: 10,
-        revenue_this_month: 920000,
-        avg_rating: 4.9,
-      },
-      {
-        id: '3',
-        name: 'Tom Davis',
-        email: 'tom@example.com',
-        phone: null,
-        role: 'dispatcher',
-        color: '#f59e0b',
-        skills: [],
-        is_active: true,
-        hourly_rate_cents: 2000,
-        jobs_today: 0,
-        jobs_this_week: 0,
-        revenue_this_month: 0,
-        avg_rating: 0,
-      },
-    ];
+    return [];
   }
 
   return members.map((m: any) => ({
@@ -258,7 +212,7 @@ export default async function TeamPage() {
                 <TrendingUp className="w-5 h-5 text-purple-600" />
               </div>
               <div>
-                <div className="text-2xl font-bold text-slate-900">94%</div>
+                <div className="text-2xl font-bold text-slate-900">—</div>
                 <div className="text-sm text-slate-500">On-Time Rate</div>
               </div>
             </div>

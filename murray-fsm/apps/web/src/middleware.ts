@@ -59,8 +59,14 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser();
 
-  // Protect dashboard routes
-  if (!user && request.nextUrl.pathname.startsWith('/(dashboard)')) {
+  // Protect dashboard routes (deny-by-default)
+  // Route groups like (dashboard) are NOT part of the URL path,
+  // so we protect everything except known public paths.
+  const publicPrefixes = ['/auth', '/book', '/portal', '/api'];
+  const isPublic = publicPrefixes.some(p => request.nextUrl.pathname.startsWith(p))
+    || request.nextUrl.pathname === '/';
+
+  if (!user && !isPublic) {
     return NextResponse.redirect(new URL('/auth/login', request.url));
   }
 

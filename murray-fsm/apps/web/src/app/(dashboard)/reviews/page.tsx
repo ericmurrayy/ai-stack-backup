@@ -123,7 +123,7 @@ function ReviewCard({ review }: { review: Review }) {
           <div className="text-sm font-medium text-blue-800 mb-1">Your Response</div>
           <p className="text-sm text-blue-700">{review.response_text}</p>
           <div className="text-xs text-blue-600 mt-2">
-            Responded {formatRelativeTime(review.responded_at!)}
+            Responded {review.responded_at ? formatRelativeTime(review.responded_at) : ''}
           </div>
         </div>
       ) : (
