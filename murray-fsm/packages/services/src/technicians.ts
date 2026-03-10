@@ -206,7 +206,7 @@ export function findAvailableTechnicians(
 
   for (const job of existingJobs) {
     if (
-      job.status === 'canceled' ||
+      job.status === 'cancelled' ||
       job.status === 'completed' ||
       !job.scheduled_start ||
       !job.assigned_technician_id
@@ -223,7 +223,7 @@ export function findAvailableTechnicians(
 
   // Technicians with 2+ jobs on this day are considered fully booked
   const bookedTechIds = new Set<string>();
-  for (const [techId, count] of techJobCounts) {
+  for (const [techId, count] of Array.from(techJobCounts)) {
     if (count >= 2) {
       bookedTechIds.add(techId);
     }

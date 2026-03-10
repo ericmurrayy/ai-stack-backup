@@ -82,7 +82,7 @@ export type PaymentStatus =
   | 'processing'
   | 'succeeded'
   | 'failed'
-  | 'canceled'
+  | 'cancelled'
   | 'refunded';
 
 export const PAYMENT_STATUS_CONFIG: Record<PaymentStatus, {
@@ -115,8 +115,8 @@ export const PAYMENT_STATUS_CONFIG: Record<PaymentStatus, {
     bgColor: 'bg-red-100',
     textColor: 'text-red-800',
   },
-  canceled: {
-    label: 'Canceled',
+  cancelled: {
+    label: 'Cancelled',
     color: '#6b7280',
     bgColor: 'bg-gray-100',
     textColor: 'text-gray-800',
@@ -417,7 +417,7 @@ export const AGREEMENT_STATUS_CONFIG: Record<import('./types').AgreementStatus, 
 }> = {
   active: { label: 'Active', bgColor: 'bg-green-100', textColor: 'text-green-800' },
   expired: { label: 'Expired', bgColor: 'bg-slate-100', textColor: 'text-slate-800' },
-  canceled: { label: 'Canceled', bgColor: 'bg-red-100', textColor: 'text-red-800' },
+  cancelled: { label: 'Cancelled', bgColor: 'bg-red-100', textColor: 'text-red-800' },
 } as const;
 
 // ============================================================================

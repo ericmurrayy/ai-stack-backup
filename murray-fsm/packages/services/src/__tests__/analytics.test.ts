@@ -74,7 +74,7 @@ describe('calculateRevenueTrend', () => {
   it('should only count completed jobs', () => {
     const jobs = [
       makeJob({ id: 'j1', status: 'completed', closed_at: '2025-06-10T10:00:00Z', total_cents: 10000 }),
-      makeJob({ id: 'j2', status: 'canceled', closed_at: '2025-06-10T10:00:00Z', total_cents: 5000 }),
+      makeJob({ id: 'j2', status: 'cancelled', closed_at: '2025-06-10T10:00:00Z', total_cents: 5000 }),
     ];
     const trend = calculateRevenueTrend(jobs);
     const juneEntry = trend.find((t) => t.month === '2025-06');
@@ -188,7 +188,7 @@ describe('calculateCustomerLTV', () => {
     const customer = { id: 'cust-1' };
     const jobs = [
       makeJob({ id: 'j1', status: 'completed', total_cents: 10000 }),
-      makeJob({ id: 'j2', status: 'canceled', total_cents: 20000 }),
+      makeJob({ id: 'j2', status: 'cancelled', total_cents: 20000 }),
     ];
     expect(calculateCustomerLTV(customer, jobs)).toBe(10000);
   });
@@ -288,7 +288,7 @@ describe('getRevenueByServiceType', () => {
   it('should only include completed jobs', () => {
     const jobs = [
       makeJob({ id: 'j1', status: 'completed', service_category: 'repair', total_cents: 10000 }),
-      makeJob({ id: 'j2', status: 'canceled', service_category: 'repair', total_cents: 5000 }),
+      makeJob({ id: 'j2', status: 'cancelled', service_category: 'repair', total_cents: 5000 }),
     ];
     const result = getRevenueByServiceType(jobs);
     expect(result['repair']).toBe(10000);
@@ -350,7 +350,7 @@ describe('getJobTrends', () => {
   it('should count all statuses (not just completed)', () => {
     const jobs = [
       makeJob({ id: 'j1', status: 'scheduled', created_at: '2025-06-01T10:00:00Z' }),
-      makeJob({ id: 'j2', status: 'canceled', created_at: '2025-06-05T10:00:00Z' }),
+      makeJob({ id: 'j2', status: 'cancelled', created_at: '2025-06-05T10:00:00Z' }),
     ];
     const trends = getJobTrends(jobs);
     const juneEntry = trends.find((t) => t.month === '2025-06');

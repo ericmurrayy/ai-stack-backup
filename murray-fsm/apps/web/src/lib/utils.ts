@@ -142,7 +142,7 @@ export const paymentStatusConfig = {
   processing: { label: 'Processing', color: 'bg-blue-100 text-blue-800' },
   succeeded: { label: 'Paid', color: 'bg-green-100 text-green-800' },
   failed: { label: 'Failed', color: 'bg-red-100 text-red-800' },
-  canceled: { label: 'Canceled', color: 'bg-gray-100 text-gray-800' },
+  cancelled: { label: 'Cancelled', color: 'bg-gray-100 text-gray-800' },
   refunded: { label: 'Refunded', color: 'bg-purple-100 text-purple-800' },
 };
 

@@ -5,10 +5,16 @@
 -- Last synced: 2026-03-10
 --
 -- DESIGN PHILOSOPHY:
---   This is an internal business application. Authenticated users (the
---   business owner and their team) get full CRUD on every table. The
---   owner_id column is NOT used for row-level filtering because a single
---   business operates under one Supabase project.
+--   This is an internal business application. Most tables grant full CRUD
+--   to authenticated users via USING(true).
+--
+--   SENSITIVE TABLES use owner_id = auth.uid() filtering:
+--     - api_keys           : owner-only (contains key hashes & scopes)
+--     - webhook_endpoints  : owner-only (contains webhook secrets)
+--     - business_settings  : owner-only for authenticated; anon SELECT kept
+--     - profiles           : owner-only (id = auth.uid() OR owner_id = auth.uid())
+--
+--   Edge Functions using the service_role key bypass RLS entirely.
 --
 --   Exceptions for public/anon access:
 --     - business_settings : anon SELECT (booking widget reads biz info)
@@ -91,6 +97,10 @@ DROP POLICY IF EXISTS "profiles_authenticated_select"     ON profiles;
 DROP POLICY IF EXISTS "profiles_authenticated_insert"     ON profiles;
 DROP POLICY IF EXISTS "profiles_authenticated_update"     ON profiles;
 DROP POLICY IF EXISTS "profiles_authenticated_delete"     ON profiles;
+DROP POLICY IF EXISTS "profiles_owner_select"             ON profiles;
+DROP POLICY IF EXISTS "profiles_owner_insert"             ON profiles;
+DROP POLICY IF EXISTS "profiles_owner_update"             ON profiles;
+DROP POLICY IF EXISTS "profiles_owner_delete"             ON profiles;
 
 -- customers
 DROP POLICY IF EXISTS "Users can view own customers"      ON customers;
@@ -339,6 +349,10 @@ DROP POLICY IF EXISTS "business_settings_authenticated_insert" ON business_setti
 DROP POLICY IF EXISTS "business_settings_authenticated_update" ON business_settings;
 DROP POLICY IF EXISTS "business_settings_authenticated_delete" ON business_settings;
 DROP POLICY IF EXISTS "business_settings_anon_select"          ON business_settings;
+DROP POLICY IF EXISTS "business_settings_owner_select"         ON business_settings;
+DROP POLICY IF EXISTS "business_settings_owner_insert"         ON business_settings;
+DROP POLICY IF EXISTS "business_settings_owner_update"         ON business_settings;
+DROP POLICY IF EXISTS "business_settings_owner_delete"         ON business_settings;
 
 -- tags
 DROP POLICY IF EXISTS "tags_select"                       ON tags;
@@ -359,6 +373,10 @@ DROP POLICY IF EXISTS "api_keys_authenticated_select"     ON api_keys;
 DROP POLICY IF EXISTS "api_keys_authenticated_insert"     ON api_keys;
 DROP POLICY IF EXISTS "api_keys_authenticated_update"     ON api_keys;
 DROP POLICY IF EXISTS "api_keys_authenticated_delete"     ON api_keys;
+DROP POLICY IF EXISTS "api_keys_owner_select"             ON api_keys;
+DROP POLICY IF EXISTS "api_keys_owner_insert"             ON api_keys;
+DROP POLICY IF EXISTS "api_keys_owner_update"             ON api_keys;
+DROP POLICY IF EXISTS "api_keys_owner_delete"             ON api_keys;
 
 -- webhook_endpoints
 DROP POLICY IF EXISTS "Users can view own webhook_endpoints"   ON webhook_endpoints;
@@ -369,6 +387,10 @@ DROP POLICY IF EXISTS "webhook_endpoints_authenticated_select" ON webhook_endpoi
 DROP POLICY IF EXISTS "webhook_endpoints_authenticated_insert" ON webhook_endpoints;
 DROP POLICY IF EXISTS "webhook_endpoints_authenticated_update" ON webhook_endpoints;
 DROP POLICY IF EXISTS "webhook_endpoints_authenticated_delete" ON webhook_endpoints;
+DROP POLICY IF EXISTS "webhook_endpoints_owner_select"         ON webhook_endpoints;
+DROP POLICY IF EXISTS "webhook_endpoints_owner_insert"         ON webhook_endpoints;
+DROP POLICY IF EXISTS "webhook_endpoints_owner_update"         ON webhook_endpoints;
+DROP POLICY IF EXISTS "webhook_endpoints_owner_delete"         ON webhook_endpoints;
 
 -- installed_plugins
 DROP POLICY IF EXISTS "Users can view own installed_plugins"   ON installed_plugins;
@@ -385,28 +407,30 @@ DROP POLICY IF EXISTS "installed_plugins_authenticated_delete" ON installed_plug
 -- SECTION 1: PROFILES
 -- ============================================================================
 -- User profile table. PK is the auth user's UUID.
--- Authenticated users get full CRUD access.
+-- RESTRICTED: Owner-only access. A user can see their own profile row
+-- (id = auth.uid()) or any profile they own (owner_id = auth.uid()).
+-- INSERT/UPDATE/DELETE restricted to rows the user owns.
 
-CREATE POLICY "profiles_authenticated_select"
+CREATE POLICY "profiles_owner_select"
     ON profiles FOR SELECT
     TO authenticated
-    USING (true);
+    USING (id = auth.uid() OR owner_id = auth.uid());
 
-CREATE POLICY "profiles_authenticated_insert"
+CREATE POLICY "profiles_owner_insert"
     ON profiles FOR INSERT
     TO authenticated
-    WITH CHECK (true);
+    WITH CHECK (owner_id = auth.uid());
 
-CREATE POLICY "profiles_authenticated_update"
+CREATE POLICY "profiles_owner_update"
     ON profiles FOR UPDATE
     TO authenticated
-    USING (true)
-    WITH CHECK (true);
+    USING (owner_id = auth.uid())
+    WITH CHECK (owner_id = auth.uid());
 
-CREATE POLICY "profiles_authenticated_delete"
+CREATE POLICY "profiles_owner_delete"
     ON profiles FOR DELETE
     TO authenticated
-    USING (true);
+    USING (owner_id = auth.uid());
 
 
 -- ============================================================================
@@ -1086,28 +1110,29 @@ CREATE POLICY "action_queue_authenticated_delete"
 -- ============================================================================
 -- Per-owner business configuration.
 -- Authenticated users: full CRUD.
--- Anon users: SELECT only (public booking widget reads business hours, name, etc.).
+-- RESTRICTED: Owner-only for authenticated users.
+-- Anon SELECT preserved for public booking widget.
 
-CREATE POLICY "business_settings_authenticated_select"
+CREATE POLICY "business_settings_owner_select"
     ON business_settings FOR SELECT
     TO authenticated
-    USING (true);
+    USING (owner_id = auth.uid());
 
-CREATE POLICY "business_settings_authenticated_insert"
+CREATE POLICY "business_settings_owner_insert"
     ON business_settings FOR INSERT
     TO authenticated
-    WITH CHECK (true);
+    WITH CHECK (owner_id = auth.uid());
 
-CREATE POLICY "business_settings_authenticated_update"
+CREATE POLICY "business_settings_owner_update"
     ON business_settings FOR UPDATE
     TO authenticated
-    USING (true)
-    WITH CHECK (true);
+    USING (owner_id = auth.uid())
+    WITH CHECK (owner_id = auth.uid());
 
-CREATE POLICY "business_settings_authenticated_delete"
+CREATE POLICY "business_settings_owner_delete"
     ON business_settings FOR DELETE
     TO authenticated
-    USING (true);
+    USING (owner_id = auth.uid());
 
 -- Anon read access: booking widget and public-facing pages need to read
 -- business name, phone, hours, etc. Sensitive fields are excluded at the
@@ -1148,55 +1173,57 @@ CREATE POLICY "tags_authenticated_delete"
 -- ============================================================================
 -- SECTION 28: API_KEYS
 -- ============================================================================
--- API access management. Full CRUD for authenticated users.
+-- RESTRICTED: Owner-only access. API keys contain sensitive credentials
+-- (key hashes, scopes, rate limits). Only the owner should have access.
 
-CREATE POLICY "api_keys_authenticated_select"
+CREATE POLICY "api_keys_owner_select"
     ON api_keys FOR SELECT
     TO authenticated
-    USING (true);
+    USING (owner_id = auth.uid());
 
-CREATE POLICY "api_keys_authenticated_insert"
+CREATE POLICY "api_keys_owner_insert"
     ON api_keys FOR INSERT
     TO authenticated
-    WITH CHECK (true);
+    WITH CHECK (owner_id = auth.uid());
 
-CREATE POLICY "api_keys_authenticated_update"
+CREATE POLICY "api_keys_owner_update"
     ON api_keys FOR UPDATE
     TO authenticated
-    USING (true)
-    WITH CHECK (true);
+    USING (owner_id = auth.uid())
+    WITH CHECK (owner_id = auth.uid());
 
-CREATE POLICY "api_keys_authenticated_delete"
+CREATE POLICY "api_keys_owner_delete"
     ON api_keys FOR DELETE
     TO authenticated
-    USING (true);
+    USING (owner_id = auth.uid());
 
 
 -- ============================================================================
 -- SECTION 29: WEBHOOK_ENDPOINTS
 -- ============================================================================
--- Outgoing webhook endpoints. Full CRUD for authenticated users.
+-- RESTRICTED: Owner-only access. Webhook endpoints contain secrets used
+-- for HMAC signing. Exposing these would allow forging webhook payloads.
 
-CREATE POLICY "webhook_endpoints_authenticated_select"
+CREATE POLICY "webhook_endpoints_owner_select"
     ON webhook_endpoints FOR SELECT
     TO authenticated
-    USING (true);
+    USING (owner_id = auth.uid());
 
-CREATE POLICY "webhook_endpoints_authenticated_insert"
+CREATE POLICY "webhook_endpoints_owner_insert"
     ON webhook_endpoints FOR INSERT
     TO authenticated
-    WITH CHECK (true);
+    WITH CHECK (owner_id = auth.uid());
 
-CREATE POLICY "webhook_endpoints_authenticated_update"
+CREATE POLICY "webhook_endpoints_owner_update"
     ON webhook_endpoints FOR UPDATE
     TO authenticated
-    USING (true)
-    WITH CHECK (true);
+    USING (owner_id = auth.uid())
+    WITH CHECK (owner_id = auth.uid());
 
-CREATE POLICY "webhook_endpoints_authenticated_delete"
+CREATE POLICY "webhook_endpoints_owner_delete"
     ON webhook_endpoints FOR DELETE
     TO authenticated
-    USING (true);
+    USING (owner_id = auth.uid());
 
 
 -- ============================================================================

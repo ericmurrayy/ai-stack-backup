@@ -97,7 +97,7 @@ CREATE TYPE agreement_type AS ENUM (
 );
 
 CREATE TYPE agreement_status AS ENUM (
-    'active', 'expired', 'canceled'
+    'active', 'expired', 'cancelled'
 );
 
 CREATE TYPE billing_cycle AS ENUM (
@@ -951,7 +951,7 @@ CREATE OR REPLACE TRIGGER on_auth_user_created
 -- ============================================================================
 
 CREATE TYPE payment_status AS ENUM (
-    'pending', 'processing', 'succeeded', 'failed', 'refunded', 'partially_refunded', 'canceled'
+    'pending', 'processing', 'succeeded', 'failed', 'refunded', 'partially_refunded', 'cancelled'
 );
 
 CREATE TYPE payment_method_type AS ENUM (

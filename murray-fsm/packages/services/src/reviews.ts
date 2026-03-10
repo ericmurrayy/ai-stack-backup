@@ -110,7 +110,7 @@ export function getReviewStats(reviews: Review[]): ReviewStats {
   const byPlatform: Record<string, { count: number; averageRating: number }> =
     {};
 
-  for (const [platform, data] of platformMap) {
+  for (const [platform, data] of Array.from(platformMap)) {
     byPlatform[platform] = {
       count: data.count,
       averageRating: Math.round((data.totalRating / data.count) * 10) / 10,

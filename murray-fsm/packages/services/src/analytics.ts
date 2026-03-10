@@ -215,7 +215,7 @@ export function calculateCustomerLTV(
  */
 export function calculateClosingRate(jobs: AnalyticsJob[]): number {
   const completed = jobs.filter((j) => j.status === 'completed').length;
-  const cancelled = jobs.filter((j) => j.status === 'canceled').length;
+  const cancelled = jobs.filter((j) => j.status === 'cancelled').length;
   const total = completed + cancelled;
 
   if (total === 0) return 0;

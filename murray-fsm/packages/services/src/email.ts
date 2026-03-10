@@ -508,20 +508,28 @@ Questions? Call us at ${formatPhone(data.businessPhone)}
  * Returns functions for sending different types of emails
  */
 export function createEmailService(config: EmailConfig) {
-  // This is the interface - actual sending would be done by provider-specific implementation
-  // In Next.js API routes or Edge Functions
-
   return {
     /**
-     * Send a raw email
+     * Send a raw email via configured provider
      */
     async send(message: EmailMessage): Promise<EmailResult> {
-      // Implementation would use provider SDK
-      // For now, return structure for API route implementation
-      return {
-        success: false,
-        error: 'Email sending must be implemented in API route with provider SDK',
-      };
+      try {
+        switch (config.provider) {
+          case 'resend':
+            return await sendViaResend(config, message);
+          case 'sendgrid':
+            return await sendViaSendGrid(config, message);
+          case 'postmark':
+            return await sendViaPostmark(config, message);
+          default:
+            return { success: false, error: `Unsupported provider: ${config.provider}` };
+        }
+      } catch (error: any) {
+        return {
+          success: false,
+          error: error.message || 'Failed to send email',
+        };
+      }
     },
 
     /**
@@ -556,4 +564,111 @@ export function createEmailService(config: EmailConfig) {
       return this.send({ to, subject, html, text });
     },
   };
+}
+
+// ============================================================================
+// Provider Implementations
+// ============================================================================
+
+async function sendViaResend(config: EmailConfig, message: EmailMessage): Promise<EmailResult> {
+  if (!config.apiKey) {
+    return { success: false, error: 'Resend API key not configured' };
+  }
+
+  const payload: Record<string, unknown> = {
+    from: `${config.from.name} <${config.from.email}>`,
+    to: Array.isArray(message.to) ? message.to : [message.to],
+    subject: message.subject,
+  };
+
+  if (message.html) payload.html = message.html;
+  if (message.text) payload.text = message.text;
+  if (message.replyTo || config.replyTo) payload.reply_to = message.replyTo || config.replyTo;
+  if (message.tags) payload.tags = Object.entries(message.tags).map(([name, value]) => ({ name, value }));
+
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${config.apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: res.statusText }));
+    return { success: false, error: err.message || `Resend error: ${res.status}` };
+  }
+
+  const data = await res.json();
+  return { success: true, messageId: data.id };
+}
+
+async function sendViaSendGrid(config: EmailConfig, message: EmailMessage): Promise<EmailResult> {
+  if (!config.apiKey) {
+    return { success: false, error: 'SendGrid API key not configured' };
+  }
+
+  const content: Array<{ type: string; value: string }> = [];
+  if (message.text) content.push({ type: 'text/plain', value: message.text });
+  if (message.html) content.push({ type: 'text/html', value: message.html });
+
+  const payload = {
+    personalizations: [{ to: (Array.isArray(message.to) ? message.to : [message.to]).map(email => ({ email })) }],
+    from: { email: config.from.email, name: config.from.name },
+    subject: message.subject,
+    content,
+    ...(message.replyTo || config.replyTo ? { reply_to: { email: message.replyTo || config.replyTo } } : {}),
+  };
+
+  const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${config.apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ errors: [{ message: res.statusText }] }));
+    return { success: false, error: err.errors?.[0]?.message || `SendGrid error: ${res.status}` };
+  }
+
+  const msgId = res.headers.get('x-message-id') || undefined;
+  return { success: true, messageId: msgId };
+}
+
+async function sendViaPostmark(config: EmailConfig, message: EmailMessage): Promise<EmailResult> {
+  if (!config.apiKey) {
+    return { success: false, error: 'Postmark API key not configured' };
+  }
+
+  const payload: Record<string, unknown> = {
+    From: `${config.from.name} <${config.from.email}>`,
+    To: Array.isArray(message.to) ? message.to.join(',') : message.to,
+    Subject: message.subject,
+  };
+
+  if (message.html) payload.HtmlBody = message.html;
+  if (message.text) payload.TextBody = message.text;
+  if (message.replyTo || config.replyTo) payload.ReplyTo = message.replyTo || config.replyTo;
+
+  const res = await fetch('https://api.postmarkapp.com/email', {
+    method: 'POST',
+    headers: {
+      'X-Postmark-Server-Token': config.apiKey,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ Message: res.statusText }));
+    return { success: false, error: err.Message || `Postmark error: ${res.status}` };
+  }
+
+  const data = await res.json();
+  return { success: true, messageId: data.MessageID };
 }

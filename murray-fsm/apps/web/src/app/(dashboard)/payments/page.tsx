@@ -136,7 +136,7 @@ export default async function PaymentsPage() {
                       <td className="px-6 py-4">
                         {payment.job ? (
                           <div className="text-sm text-slate-900">
-                            {payment.job.title}
+                            {payment.job.issue_description || `Job #${payment.job.job_number || ''}`}
                           </div>
                         ) : (
                           <span className="text-slate-400">-</span>

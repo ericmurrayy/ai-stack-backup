@@ -103,7 +103,7 @@ export default function JobDetailScreen() {
 
     if (result.success) {
       Alert.alert('Success', 'Payment completed successfully');
-    } else if (result.error !== 'Payment canceled') {
+    } else if (result.error !== 'Payment cancelled') {
       Alert.alert('Payment Failed', result.error);
     }
   };

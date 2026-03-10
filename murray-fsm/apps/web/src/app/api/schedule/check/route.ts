@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
       .select('id, scheduled_start, scheduled_end, title, status')
       .eq('owner_id', user.id)
       .eq('deleted', false)
-      .not('status', 'in', '("canceled","completed")')
+      .not('status', 'in', '("cancelled","completed")')
       .not('scheduled_start', 'is', null);
 
     if (error) {
@@ -121,7 +121,7 @@ export async function GET(request: NextRequest) {
       .select('id, scheduled_start, scheduled_end, title, status')
       .eq('owner_id', user.id)
       .eq('deleted', false)
-      .not('status', 'in', '("canceled","completed")')
+      .not('status', 'in', '("cancelled","completed")')
       .not('scheduled_start', 'is', null);
 
     if (error) {
