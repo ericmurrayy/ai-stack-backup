@@ -53,8 +53,8 @@ export async function POST(request: NextRequest) {
 
     // Fetch technicians
     let techQuery = supabase
-      .from('team_members')
-      .select('id, full_name, color')
+      .from('technicians')
+      .select('id, name, color')
       .eq('owner_id', auth.ownerId)
       .eq('deleted', false)
       .eq('is_active', true)
@@ -129,7 +129,7 @@ export async function POST(request: NextRequest) {
           const tech = technicians?.find(t => t.id === techId);
           return {
             technicianId: techId,
-            technicianName: tech?.full_name,
+            technicianName: tech?.name,
             technicianColor: tech?.color,
             stops: route.stops.map(stop => ({
               jobId: stop.jobId,
@@ -222,7 +222,7 @@ export async function GET(request: NextRequest) {
       .from('technician_locations')
       .select(`
         team_member_id, lat, lng, recorded_at,
-        team_member:team_members(id, full_name, phone, color, is_active)
+        team_member:technicians(id, name, phone, color, is_active)
       `)
       .eq('owner_id', auth.ownerId)
       .gte('recorded_at', new Date(Date.now() - 30 * 60 * 1000).toISOString()) // Last 30 minutes
@@ -241,7 +241,7 @@ export async function GET(request: NextRequest) {
       id: loc.team_member_id,
       currentLocation: { id: loc.team_member_id, lat: loc.lat, lng: loc.lng },
       available: true,
-      name: loc.team_member?.full_name,
+      name: loc.team_member?.name,
       phone: loc.team_member?.phone,
       color: loc.team_member?.color,
     }));

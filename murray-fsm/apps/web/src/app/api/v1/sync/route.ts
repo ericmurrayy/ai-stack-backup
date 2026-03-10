@@ -106,7 +106,7 @@ export async function POST(request: NextRequest) {
       // Line items updated since last sync
       supabase
         .from('line_items')
-        .select('id, job_id, kind, name, description, quantity, unit_price_cents, total_cents, created_at, updated_at, deleted')
+        .select('id, job_id, kind, name, description, qty, unit_price_cents, total_cents, created_at, updated_at, deleted')
         .eq('owner_id', auth.ownerId)
         .gte('updated_at', syncCutoff.toISOString())
         .order('updated_at', { ascending: false })

@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
         total_cents, paid_cents, internal_notes, created_at, updated_at,
         customer:customers(id, name, phone, email),
         location:locations(id, address1, city, state, postal_code, lat, lng),
-        assigned:team_members(id, full_name, phone)
+        assigned:technicians(id, name, phone)
       `, { count: 'exact' })
       .eq('owner_id', auth.ownerId)
       .eq('deleted', false)
@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
 
     // Apply filters
     if (status) query = query.eq('status', status);
-    if (assignedTo) query = query.eq('assigned_to', assignedTo);
+    if (assignedTo) query = query.eq('assigned_technician_id', assignedTo);
     if (customerId) query = query.eq('customer_id', customerId);
     if (fromDate) query = query.gte('scheduled_start', fromDate);
     if (toDate) query = query.lte('scheduled_start', toDate);

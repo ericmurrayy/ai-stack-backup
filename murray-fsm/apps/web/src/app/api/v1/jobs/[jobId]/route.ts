@@ -36,7 +36,7 @@ export async function GET(
         *,
         customer:customers(id, name, phone, email),
         location:locations(*),
-        assigned:team_members(id, full_name, phone, email, color),
+        assigned:technicians(id, name, phone, email, color),
         line_items:line_items(*),
         photos:job_photos(id, url, caption, taken_at)
       `)
