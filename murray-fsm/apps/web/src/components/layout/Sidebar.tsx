@@ -31,6 +31,8 @@ import {
   TrendingUp,
   Trophy,
   Receipt,
+  Timer,
+  Activity,
 } from 'lucide-react';
 
 const mainNavigation = [
@@ -61,7 +63,9 @@ const businessNavigation = [
 const operationsNavigation = [
   { name: 'Team', href: '/team', icon: UserCog },
   { name: 'Performance', href: '/performance', icon: Trophy },
+  { name: 'Time Tracking', href: '/timetracking', icon: Timer },
   { name: 'Automations', href: '/automations', icon: Bot },
+  { name: 'Activity', href: '/activity', icon: Activity },
   { name: 'Inventory', href: '/inventory', icon: Package },
   { name: 'Recurring', href: '/recurring', icon: Repeat },
   { name: 'Agreements', href: '/agreements', icon: FileCheck },
