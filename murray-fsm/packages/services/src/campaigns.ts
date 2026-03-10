@@ -1,6 +1,32 @@
 // Murray's FSM - Campaigns Service
 // ==================================
-// Campaign recipient building, stats aggregation, and metrics formatting
+// Campaign recipient building, stats aggregation, metrics formatting, and validation
+
+import type { Campaign, CampaignRecipientStatus } from '@murray-fsm/shared';
+
+// ============================================================================
+// Types
+// ============================================================================
+
+export interface CampaignStatsResult {
+  deliveryRate: number;
+  openRate: number;
+  clickRate: number;
+  bounceRate: number;
+}
+
+export interface FormattedCampaignMetrics {
+  deliveryRate: string;
+  openRate: string;
+  clickRate: string;
+  bounceRate: string;
+}
+
+export interface CampaignSummary {
+  total: number;
+  byStatus: Record<string, number>;
+  avgOpenRate: number;
+}
 
 // ============================================================================
 // Recipient List Building
@@ -18,7 +44,11 @@ export function buildRecipientList(
   customers: Array<{ id: string; email?: string | null; phone?: string | null }>,
   channel: 'email' | 'sms'
 ): Array<{ customer_id: string; destination: string; channel: 'email' | 'sms' }> {
-  const recipients: Array<{ customer_id: string; destination: string; channel: 'email' | 'sms' }> = [];
+  const recipients: Array<{
+    customer_id: string;
+    destination: string;
+    channel: 'email' | 'sms';
+  }> = [];
 
   for (const customer of customers) {
     if (channel === 'email' && customer.email) {
@@ -40,65 +70,35 @@ export function buildRecipientList(
 }
 
 // ============================================================================
-// Campaign Stats Aggregation
+// Campaign Stats Calculation
 // ============================================================================
 
 /**
- * Aggregate campaign recipient statuses into summary stats.
+ * Calculate open rate, click rate, bounce rate, and delivery rate
+ * from a campaign's embedded stats object.
+ *
+ * All rates returned as percentages (0-100), rounded to 1 decimal.
  */
-export function calculateCampaignStats(
-  recipients: Array<{ status: string }>
-): {
-  sent: number;
-  delivered: number;
-  opened: number;
-  clicked: number;
-  bounced: number;
-  failed: number;
-} {
-  const stats = {
-    sent: 0,
-    delivered: 0,
-    opened: 0,
-    clicked: 0,
-    bounced: 0,
-    failed: 0,
-  };
+export function calculateCampaignStats(campaign: Campaign): CampaignStatsResult {
+  const stats = campaign.stats;
 
-  for (const recipient of recipients) {
-    switch (recipient.status) {
-      case 'sent':
-        stats.sent++;
-        break;
-      case 'delivered':
-        stats.sent++;
-        stats.delivered++;
-        break;
-      case 'opened':
-        stats.sent++;
-        stats.delivered++;
-        stats.opened++;
-        break;
-      case 'clicked':
-        stats.sent++;
-        stats.delivered++;
-        stats.opened++;
-        stats.clicked++;
-        break;
-      case 'bounced':
-        stats.sent++;
-        stats.bounced++;
-        break;
-      case 'failed':
-        stats.failed++;
-        break;
-      default:
-        // 'pending' or unknown — no increment
-        break;
-    }
+  if (!stats || !stats.sent || stats.sent === 0) {
+    return { deliveryRate: 0, openRate: 0, clickRate: 0, bounceRate: 0 };
   }
 
-  return stats;
+  const delivered = stats.delivered ?? 0;
+  const opened = stats.opened ?? 0;
+  const clicked = stats.clicked ?? 0;
+  const bounced = stats.sent - delivered;
+
+  const deliveryRate = Math.round((delivered / stats.sent) * 1000) / 10;
+  const openRate =
+    delivered > 0 ? Math.round((opened / delivered) * 1000) / 10 : 0;
+  const clickRate =
+    opened > 0 ? Math.round((clicked / opened) * 1000) / 10 : 0;
+  const bounceRate = Math.round((bounced / stats.sent) * 1000) / 10;
+
+  return { deliveryRate, openRate, clickRate, bounceRate };
 }
 
 // ============================================================================
@@ -106,32 +106,99 @@ export function calculateCampaignStats(
 // ============================================================================
 
 /**
- * Format campaign metrics as human-readable percentage strings.
+ * Format campaign stats as human-readable percentage strings.
  */
-export function formatCampaignMetrics(stats: {
-  sent: number;
-  delivered: number;
-  opened: number;
-  clicked: number;
-}): {
-  deliveryRate: string;
-  openRate: string;
-  clickRate: string;
-} {
-  const deliveryRate =
-    stats.sent > 0
-      ? ((stats.delivered / stats.sent) * 100).toFixed(1) + '%'
-      : '0.0%';
+export function formatCampaignMetrics(
+  stats: CampaignStatsResult
+): FormattedCampaignMetrics {
+  return {
+    deliveryRate: stats.deliveryRate.toFixed(1) + '%',
+    openRate: stats.openRate.toFixed(1) + '%',
+    clickRate: stats.clickRate.toFixed(1) + '%',
+    bounceRate: stats.bounceRate.toFixed(1) + '%',
+  };
+}
 
-  const openRate =
-    stats.delivered > 0
-      ? ((stats.opened / stats.delivered) * 100).toFixed(1) + '%'
-      : '0.0%';
+// ============================================================================
+// Campaign Summary
+// ============================================================================
 
-  const clickRate =
-    stats.opened > 0
-      ? ((stats.clicked / stats.opened) * 100).toFixed(1) + '%'
-      : '0.0%';
+/**
+ * Aggregate summary across multiple campaigns:
+ * total count, count by status, and average open rate.
+ */
+export function getCampaignSummary(campaigns: Campaign[]): CampaignSummary {
+  const byStatus: Record<string, number> = {};
+  let totalOpenRate = 0;
+  let campaignsWithStats = 0;
 
-  return { deliveryRate, openRate, clickRate };
+  for (const campaign of campaigns) {
+    // Count by status
+    const status = campaign.status ?? 'unknown';
+    byStatus[status] = (byStatus[status] || 0) + 1;
+
+    // Accumulate open rate for averaging
+    if (campaign.stats && campaign.stats.sent && campaign.stats.sent > 0) {
+      const delivered = campaign.stats.delivered ?? 0;
+      const opened = campaign.stats.opened ?? 0;
+
+      if (delivered > 0) {
+        totalOpenRate += (opened / delivered) * 100;
+        campaignsWithStats++;
+      }
+    }
+  }
+
+  const avgOpenRate =
+    campaignsWithStats > 0
+      ? Math.round((totalOpenRate / campaignsWithStats) * 10) / 10
+      : 0;
+
+  return {
+    total: campaigns.length,
+    byStatus,
+    avgOpenRate,
+  };
+}
+
+// ============================================================================
+// Send Readiness Validation
+// ============================================================================
+
+/**
+ * Check whether a campaign has all required fields to be sent:
+ * - Has a template_subject (for email campaigns)
+ * - Has a template_body
+ * - Has a scheduled_at time
+ * - Stats indicate there are recipients (sent > 0 or campaign is still in draft)
+ *
+ * Returns true only if the campaign passes all checks.
+ */
+export function isCampaignReadyToSend(campaign: Campaign): boolean {
+  // Must have a body
+  if (!campaign.template_body || campaign.template_body.trim().length === 0) {
+    return false;
+  }
+
+  // Email campaigns must have a subject
+  if (campaign.type !== 'sms') {
+    if (
+      !campaign.template_subject ||
+      campaign.template_subject.trim().length === 0
+    ) {
+      return false;
+    }
+  }
+
+  // Must have a scheduled send time
+  if (!campaign.scheduled_at) {
+    return false;
+  }
+
+  // Must have a name
+  if (!campaign.name || campaign.name.trim().length === 0) {
+    return false;
+  }
+
+  return true;
 }
