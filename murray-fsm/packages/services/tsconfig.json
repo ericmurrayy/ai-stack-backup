@@ -6,6 +6,7 @@
     "lib": ["ES2022"],
     "downlevelIteration": true,
     "strict": true,
+    "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
     "declaration": true,

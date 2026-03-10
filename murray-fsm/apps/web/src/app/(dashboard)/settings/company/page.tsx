@@ -240,7 +240,7 @@ export default function CompanySettingsPage() {
         {/* Branding */}
         <Card padding="none" className="p-6">
           <h3 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
-            <Image className="w-5 h-5 text-purple-600" />
+            <Image className="w-5 h-5 text-purple-600" aria-hidden="true" />
             Branding
           </h3>
           <div className="space-y-4">
@@ -263,6 +263,7 @@ export default function CompanySettingsPage() {
                     value={settings.primary_color}
                     onChange={e => updateField('primary_color', e.target.value)}
                     aria-label="Primary color picker"
+                    title="Primary color picker"
                     className="w-10 h-10 rounded border border-slate-300 cursor-pointer"
                   />
                   <input
@@ -282,6 +283,7 @@ export default function CompanySettingsPage() {
                     value={settings.secondary_color}
                     onChange={e => updateField('secondary_color', e.target.value)}
                     aria-label="Secondary color picker"
+                    title="Secondary color picker"
                     className="w-10 h-10 rounded border border-slate-300 cursor-pointer"
                   />
                   <input
