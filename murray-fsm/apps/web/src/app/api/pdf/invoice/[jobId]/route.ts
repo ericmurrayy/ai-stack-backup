@@ -27,6 +27,12 @@ export async function GET(
   try {
     const supabase = createClient();
 
+    // Auth check — require logged-in user
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     // Fetch job with related data
     const { data: job, error: jobError } = await supabase
       .from('jobs')

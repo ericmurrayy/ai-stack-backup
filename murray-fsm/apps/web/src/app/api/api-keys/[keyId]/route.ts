@@ -19,11 +19,12 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get API key
+    // Get API key (scoped to current user)
     const { data: apiKey, error } = await supabase
       .from('api_keys')
       .select('id, name, key_prefix, scopes, created_at, expires_at, last_used_at, is_active, rate_limit_per_minute, allowed_ips, description')
       .eq('id', params.keyId)
+      .eq('owner_id', user.id)
       .eq('deleted', false)
       .single();
 
@@ -111,6 +112,7 @@ export async function PATCH(
       .from('api_keys')
       .update(updates)
       .eq('id', params.keyId)
+      .eq('owner_id', user.id)
       .eq('deleted', false)
       .select('id, name, key_prefix, scopes, is_active')
       .single();
@@ -150,7 +152,8 @@ export async function DELETE(
         is_active: false,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', params.keyId);
+      .eq('id', params.keyId)
+      .eq('owner_id', user.id);
 
     if (error) throw error;
 

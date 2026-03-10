@@ -25,6 +25,7 @@ export async function GET(request: NextRequest) {
     const { data: keys, error } = await supabase
       .from('api_keys')
       .select('id, name, key_prefix, scopes, created_at, expires_at, last_used_at, is_active, rate_limit_per_minute, allowed_ips, description')
+      .eq('owner_id', user.id)
       .eq('deleted', false)
       .order('created_at', { ascending: false });
 
@@ -74,6 +75,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate scopes
+    if (!Array.isArray(scopes) || scopes.length === 0) {
+      return NextResponse.json(
+        { error: 'scopes must be a non-empty array' },
+        { status: 400 }
+      );
+    }
     const validScopes = Object.keys(API_SCOPE_DESCRIPTIONS) as ApiKeyScope[];
     const invalidScopes = scopes.filter((s: string) => !validScopes.includes(s as ApiKeyScope));
     if (invalidScopes.length > 0) {
@@ -97,6 +104,7 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabase
       .from('api_keys')
       .insert({
+        owner_id: user.id,
         name,
         key_prefix: keyPrefix,
         key_hash: keyHash,

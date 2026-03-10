@@ -24,11 +24,12 @@ export async function GET(
       return NextResponse.json({ error: 'Plugin not found' }, { status: 404 });
     }
 
-    // Get installed config
+    // Get installed config (scoped to owner)
     const { data: installed } = await supabase
       .from('installed_plugins')
       .select('*')
       .eq('plugin_id', params.pluginId)
+      .eq('owner_id', user.id)
       .eq('deleted', false)
       .single();
 
@@ -99,6 +100,7 @@ export async function PATCH(
       .from('installed_plugins')
       .update(updates)
       .eq('plugin_id', params.pluginId)
+      .eq('owner_id', user.id)
       .eq('deleted', false)
       .select()
       .single();
@@ -136,7 +138,8 @@ export async function DELETE(
     const { error } = await supabase
       .from('installed_plugins')
       .update({ deleted: true, updated_at: new Date().toISOString() })
-      .eq('plugin_id', params.pluginId);
+      .eq('plugin_id', params.pluginId)
+      .eq('owner_id', user.id);
 
     if (error) {
       throw error;

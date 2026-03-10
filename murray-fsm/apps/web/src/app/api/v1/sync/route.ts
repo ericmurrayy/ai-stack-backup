@@ -52,8 +52,14 @@ export async function POST(request: NextRequest) {
     const body: SyncRequest = await request.json();
     const { lastSyncedAt, deviceId, changes } = body;
 
-    // Process any incoming changes from device
+    // Process any incoming changes from device (requires write scope)
     if (changes) {
+      if (!hasScope(auth.scopes!, 'write:jobs')) {
+        return NextResponse.json(
+          { error: 'write:jobs scope required to push changes', code: 'FORBIDDEN' },
+          { status: 403 }
+        );
+      }
       await processChanges(supabase, auth.ownerId!, changes);
     }
 
@@ -175,13 +181,35 @@ async function processChanges(
 ): Promise<void> {
   if (!changes) return;
 
+  // Allowlists prevent arbitrary field overwrite
+  const JOB_ALLOWED_FIELDS = [
+    'title', 'status', 'service_type', 'scheduled_start', 'scheduled_end',
+    'internal_notes', 'customer_notes', 'priority', 'estimated_duration_minutes',
+    'actual_duration_minutes',
+  ];
+  const TIME_ENTRY_ALLOWED_FIELDS = [
+    'job_id', 'team_member_id', 'clock_in', 'clock_out', 'break_minutes', 'notes',
+  ];
+  const PHOTO_ALLOWED_FIELDS = [
+    'job_id', 'url', 'thumbnail_url', 'caption', 'taken_at',
+  ];
+
+  function pick(data: Record<string, unknown>, allowed: string[]): Record<string, unknown> {
+    const result: Record<string, unknown> = {};
+    for (const key of allowed) {
+      if (data[key] !== undefined) result[key] = data[key];
+    }
+    return result;
+  }
+
   // Process job changes
   if (changes.jobs) {
     for (const change of changes.jobs) {
       if (change.action === 'update' && change.data) {
+        const safe = pick(change.data, JOB_ALLOWED_FIELDS);
         await supabase
           .from('jobs')
-          .update({ ...change.data, updated_at: new Date().toISOString() })
+          .update({ ...safe, updated_at: new Date().toISOString() })
           .eq('id', change.id)
           .eq('owner_id', ownerId);
       }
@@ -192,13 +220,15 @@ async function processChanges(
   if (changes.timeEntries) {
     for (const change of changes.timeEntries) {
       if (change.action === 'create' && change.data) {
+        const safe = pick(change.data, TIME_ENTRY_ALLOWED_FIELDS);
         await supabase
           .from('time_entries')
-          .insert({ ...change.data, owner_id: ownerId, id: change.id });
+          .insert({ ...safe, owner_id: ownerId, id: change.id });
       } else if (change.action === 'update' && change.data) {
+        const safe = pick(change.data, TIME_ENTRY_ALLOWED_FIELDS);
         await supabase
           .from('time_entries')
-          .update(change.data)
+          .update(safe)
           .eq('id', change.id)
           .eq('owner_id', ownerId);
       }
@@ -209,9 +239,10 @@ async function processChanges(
   if (changes.photos) {
     for (const change of changes.photos) {
       if (change.action === 'create' && change.data) {
+        const safe = pick(change.data, PHOTO_ALLOWED_FIELDS);
         await supabase
           .from('job_photos')
-          .insert({ ...change.data, owner_id: ownerId, id: change.id });
+          .insert({ ...safe, owner_id: ownerId, id: change.id });
       } else if (change.action === 'delete') {
         await supabase
           .from('job_photos')

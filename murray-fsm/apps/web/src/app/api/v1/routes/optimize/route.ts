@@ -32,8 +32,10 @@ export async function POST(request: NextRequest) {
 
     // Get the target date (default to today)
     const targetDate = date ? new Date(date) : new Date();
-    const startOfDay = new Date(targetDate.setHours(0, 0, 0, 0));
-    const endOfDay = new Date(targetDate.setHours(23, 59, 59, 999));
+    const startOfDay = new Date(targetDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(targetDate);
+    endOfDay.setHours(23, 59, 59, 999);
 
     // Fetch jobs for the day
     const { data: jobs, error: jobsError } = await supabase
@@ -118,8 +120,10 @@ export async function POST(request: NextRequest) {
         maxJobs: 8,
       }));
 
+      const dispatchStartTime = new Date(startOfDay);
+      dispatchStartTime.setHours(8, 0, 0, 0);
       const dispatchResult = dispatchJobs(routingJobs, techsWithLocations, {
-        startTime: new Date(startOfDay.setHours(8, 0, 0, 0)),
+        startTime: dispatchStartTime,
         prioritizeUrgent: true,
       });
 
@@ -155,8 +159,10 @@ export async function POST(request: NextRequest) {
         ? routingJobs.filter(j => !j.assignedTo || j.assignedTo === techId)
         : routingJobs;
 
+      const optimizeStartTime = new Date(startOfDay);
+      optimizeStartTime.setHours(8, 0, 0, 0);
       const optimized = optimizeRoute(techJobs, {
-        startTime: new Date(startOfDay.setHours(8, 0, 0, 0)),
+        startTime: optimizeStartTime,
         startLocation: defaultStartLocation,
         prioritizeUrgent: true,
       });
@@ -200,6 +206,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       { error: auth.error, code: 'UNAUTHORIZED' },
       { status: auth.statusCode || 401 }
+    );
+  }
+
+  if (!hasScope(auth.scopes!, 'read:team')) {
+    return NextResponse.json(
+      { error: 'Insufficient permissions', code: 'FORBIDDEN' },
+      { status: 403 }
     );
   }
 

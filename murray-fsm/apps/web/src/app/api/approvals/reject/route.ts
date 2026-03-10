@@ -31,7 +31,7 @@ export async function POST(request: Request) {
       .eq('owner_id', user.id)
       .eq('status', 'pending')
       .select()
-      .single();
+      .maybeSingle();
 
     if (error) {
       console.error('Error rejecting action:', error);

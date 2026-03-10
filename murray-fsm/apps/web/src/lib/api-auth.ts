@@ -8,6 +8,7 @@ import { hashApiKey, hasScope, type ApiKeyScope } from '@murray-fsm/services';
 
 export interface ApiAuthResult {
   authenticated: boolean;
+  apiKeyId?: string;
   ownerId?: string;
   scopes?: ApiKeyScope[];
   error?: string;
@@ -96,6 +97,7 @@ export async function authenticateApiRequest(
 
     return {
       authenticated: true,
+      apiKeyId: apiKey.id,
       ownerId: apiKey.owner_id,
       scopes: apiKey.scopes as ApiKeyScope[],
     };
@@ -152,12 +154,7 @@ export function withApiAuth(
       }
     }
 
-    // Add rate limit headers
     const response = await handler(request, { ...context, auth });
-
-    response.headers.set('X-RateLimit-Limit', '100');
-    response.headers.set('X-RateLimit-Remaining', '99');
-
     return response;
   };
 }

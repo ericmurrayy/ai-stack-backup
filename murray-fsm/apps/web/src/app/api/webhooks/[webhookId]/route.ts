@@ -23,11 +23,12 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get webhook
+    // Get webhook (exclude secret, scoped to owner)
     const { data: webhook, error } = await supabase
       .from('webhook_endpoints')
-      .select('*')
+      .select('id, url, events, description, is_active, failure_count, created_at, updated_at')
       .eq('id', params.webhookId)
+      .eq('owner_id', user.id)
       .eq('deleted', false)
       .single();
 
@@ -115,8 +116,9 @@ export async function PATCH(
       .from('webhook_endpoints')
       .update(updates)
       .eq('id', params.webhookId)
+      .eq('owner_id', user.id)
       .eq('deleted', false)
-      .select()
+      .select('id, url, events, description, is_active, failure_count, created_at, updated_at')
       .single();
 
     if (error) throw error;
@@ -154,7 +156,8 @@ export async function DELETE(
         deleted: true,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', params.webhookId);
+      .eq('id', params.webhookId)
+      .eq('owner_id', user.id);
 
     if (error) throw error;
 

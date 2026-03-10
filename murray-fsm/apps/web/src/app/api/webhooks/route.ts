@@ -23,7 +23,8 @@ export async function GET(request: NextRequest) {
 
     const { data: webhooks, error } = await supabase
       .from('webhook_endpoints')
-      .select('*')
+      .select('id, url, events, description, is_active, failure_count, created_at, updated_at')
+      .eq('owner_id', user.id)
       .eq('deleted', false)
       .order('created_at', { ascending: false });
 
@@ -67,6 +68,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate events
+    if (!Array.isArray(events) || events.length === 0) {
+      return NextResponse.json(
+        { error: 'events must be a non-empty array' },
+        { status: 400 }
+      );
+    }
     const validEvents = Object.keys(WEBHOOK_EVENT_DESCRIPTIONS) as WebhookEvent[];
     const invalidEvents = events.filter((e: string) => !validEvents.includes(e as WebhookEvent));
     if (invalidEvents.length > 0) {
@@ -82,6 +89,7 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabase
       .from('webhook_endpoints')
       .insert({
+        owner_id: user.id,
         url,
         secret,
         events,

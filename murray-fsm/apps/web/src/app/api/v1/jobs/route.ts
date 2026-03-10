@@ -77,7 +77,7 @@ export async function GET(request: NextRequest) {
 
     // Log usage
     await logApiUsage(
-      auth.ownerId!,
+      auth.apiKeyId!,
       auth.ownerId!,
       '/api/v1/jobs',
       'GET',
@@ -157,7 +157,7 @@ export async function POST(request: NextRequest) {
     }, { status: 201 });
 
     await logApiUsage(
-      auth.ownerId!,
+      auth.apiKeyId!,
       auth.ownerId!,
       '/api/v1/jobs',
       'POST',
