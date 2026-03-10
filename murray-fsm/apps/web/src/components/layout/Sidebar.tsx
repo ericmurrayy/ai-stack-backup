@@ -26,6 +26,8 @@ import {
   FileText,
   Repeat,
   FileCheck,
+  LayoutGrid,
+  Gift,
 } from 'lucide-react';
 
 const mainNavigation = [
@@ -33,6 +35,7 @@ const mainNavigation = [
   { name: 'Pipeline', href: '/pipeline', icon: Kanban },
   { name: 'Customers', href: '/customers', icon: Users },
   { name: 'Calendar', href: '/calendar', icon: Calendar },
+  { name: 'Dispatch', href: '/dispatch', icon: LayoutGrid },
   { name: 'Approvals', href: '/approvals', icon: CheckCircle },
 ];
 
@@ -47,6 +50,7 @@ const businessNavigation = [
   { name: 'Estimates', href: '/estimates', icon: FileText },
   { name: 'Reviews', href: '/reviews', icon: Star },
   { name: 'Marketing', href: '/marketing', icon: Megaphone },
+  { name: 'Referrals', href: '/referrals', icon: Gift },
 ];
 
 const operationsNavigation = [
