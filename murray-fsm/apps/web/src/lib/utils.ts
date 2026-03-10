@@ -96,11 +96,35 @@ export function formatDuration(seconds: number | null): string {
 }
 
 // Job status config
-export const jobStatusConfig = {
-  scheduled: { label: 'Scheduled', color: 'bg-blue-100 text-blue-800' },
+export const jobStatusConfig: Record<string, { label: string; color: string }> = {
+  new: { label: 'New', color: 'bg-blue-100 text-blue-800' },
+  contacted: { label: 'Contacted', color: 'bg-indigo-100 text-indigo-800' },
+  scheduled: { label: 'Scheduled', color: 'bg-cyan-100 text-cyan-800' },
   in_progress: { label: 'In Progress', color: 'bg-yellow-100 text-yellow-800' },
   completed: { label: 'Completed', color: 'bg-green-100 text-green-800' },
-  canceled: { label: 'Canceled', color: 'bg-red-100 text-red-800' },
+  cancelled: { label: 'Cancelled', color: 'bg-red-100 text-red-800' },
+  spam: { label: 'Spam', color: 'bg-gray-100 text-gray-800' },
+};
+
+// Service category config
+export const serviceCategoryConfig: Record<string, { label: string; color: string }> = {
+  plumbing: { label: 'Plumbing', color: 'bg-blue-100 text-blue-800' },
+  electrical: { label: 'Electrical', color: 'bg-yellow-100 text-yellow-800' },
+  hvac: { label: 'HVAC', color: 'bg-cyan-100 text-cyan-800' },
+  general: { label: 'General', color: 'bg-slate-100 text-slate-800' },
+  landscaping: { label: 'Landscaping', color: 'bg-green-100 text-green-800' },
+  cleaning: { label: 'Cleaning', color: 'bg-purple-100 text-purple-800' },
+  painting: { label: 'Painting', color: 'bg-orange-100 text-orange-800' },
+  roofing: { label: 'Roofing', color: 'bg-amber-100 text-amber-800' },
+  other: { label: 'Other', color: 'bg-gray-100 text-gray-800' },
+};
+
+// Urgency config
+export const urgencyConfig: Record<string, { label: string; color: string }> = {
+  low: { label: 'Low', color: 'bg-slate-100 text-slate-800' },
+  medium: { label: 'Medium', color: 'bg-yellow-100 text-yellow-800' },
+  high: { label: 'High', color: 'bg-orange-100 text-orange-800' },
+  emergency: { label: 'Emergency', color: 'bg-red-100 text-red-800' },
 };
 
 // Action status config

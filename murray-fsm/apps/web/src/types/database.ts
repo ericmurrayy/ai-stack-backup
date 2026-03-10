@@ -1,7 +1,10 @@
 // Murray's FSM - Database Types (Web)
 // =====================================
 
-export type JobStatus = 'scheduled' | 'in_progress' | 'completed' | 'canceled';
+export type JobStatus = 'new' | 'contacted' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled' | 'spam';
+export type ServiceCategory = 'plumbing' | 'electrical' | 'hvac' | 'general' | 'landscaping' | 'cleaning' | 'painting' | 'roofing' | 'other';
+export type Urgency = 'low' | 'medium' | 'high' | 'emergency';
+export type Priority = 'low' | 'normal' | 'high' | 'urgent';
 export type PhotoKind = 'before' | 'after' | 'other';
 export type LineItemKind = 'estimate' | 'invoice';
 export type PaymentStatus = 'pending' | 'processing' | 'succeeded' | 'failed' | 'canceled' | 'refunded';
@@ -55,32 +58,49 @@ export interface Location {
 
 export interface Job {
   id: string;
-  owner_id: string;
-  customer_id: string;
-  location_id: string | null;
-  title: string;
-  service_type: string | null;
-  problem_description: string | null;
+  job_number: string | null;
+  phone_number: string | null;
+  phone_e164: string | null;
+  customer_name: string | null;
+  email: string | null;
+  city: string | null;
+  address: string | null;
+  zip_code: string | null;
+  service_category: ServiceCategory | null;
+  urgency: Urgency | null;
+  issue_description: string | null;
+  preferred_time: string | null;
+  scheduled_at: string | null;
   status: JobStatus;
-  scheduled_start: string | null;
-  scheduled_end: string | null;
-  arrived_at: string | null;
-  started_at: string | null;
-  completed_at: string | null;
-  internal_notes: string | null;
-  customer_notes: string | null;
-  diagnostics: Record<string, unknown>;
-  total_estimate_cents: number;
-  total_invoice_cents: number;
-  paid_cents: number;
+  is_spam: boolean;
+  spam_reason: string | null;
+  extraction_confidence: number | null;
+  recommended_action: string | null;
+  source_event_id: string | null;
+  created_at: string;
+  updated_at: string;
+  closed_at: string | null;
+  assigned_technician_id: string | null;
+  priority: Priority | null;
+  source: string | null;
+  recurring_job_id: string | null;
+  estimate_id: string | null;
+}
+
+export interface Technician {
+  id: string;
+  owner_id: string;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  role: string | null;
+  specialties: string[];
+  hourly_rate_cents: number | null;
+  is_active: boolean;
+  color: string | null;
   created_at: string;
   updated_at: string;
   deleted: boolean;
-}
-
-export interface JobWithRelations extends Job {
-  customer?: Customer;
-  location?: Location;
 }
 
 export interface LineItem {
