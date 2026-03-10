@@ -23,6 +23,9 @@ import {
   Megaphone,
   Package,
   Bot,
+  FileText,
+  Repeat,
+  FileCheck,
 } from 'lucide-react';
 
 const mainNavigation = [
@@ -41,6 +44,7 @@ const communicationNavigation = [
 const businessNavigation = [
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
   { name: 'Payments', href: '/payments', icon: CreditCard },
+  { name: 'Estimates', href: '/estimates', icon: FileText },
   { name: 'Reviews', href: '/reviews', icon: Star },
   { name: 'Marketing', href: '/marketing', icon: Megaphone },
 ];
@@ -48,6 +52,8 @@ const businessNavigation = [
 const operationsNavigation = [
   { name: 'Team', href: '/team', icon: UserCog },
   { name: 'Inventory', href: '/inventory', icon: Package },
+  { name: 'Recurring', href: '/recurring', icon: Repeat },
+  { name: 'Agreements', href: '/agreements', icon: FileCheck },
 ];
 
 export function Sidebar() {
