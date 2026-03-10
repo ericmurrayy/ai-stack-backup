@@ -348,3 +348,101 @@ export const DEFAULTS = {
   // Timezone
   TIMEZONE: 'America/Chicago',
 } as const;
+
+// ============================================================================
+// Job Priority Configuration
+// ============================================================================
+
+export const JOB_PRIORITY_CONFIG: Record<import('./types').JobPriority, {
+  label: string;
+  color: string;
+  bgColor: string;
+  textColor: string;
+}> = {
+  low: { label: 'Low', color: '#6B7280', bgColor: 'bg-gray-100', textColor: 'text-gray-800' },
+  normal: { label: 'Normal', color: '#3B82F6', bgColor: 'bg-blue-100', textColor: 'text-blue-800' },
+  high: { label: 'High', color: '#F59E0B', bgColor: 'bg-amber-100', textColor: 'text-amber-800' },
+  emergency: { label: 'Emergency', color: '#EF4444', bgColor: 'bg-red-100', textColor: 'text-red-800' },
+} as const;
+
+// ============================================================================
+// Review Platform Configuration
+// ============================================================================
+
+export const REVIEW_PLATFORM_CONFIG: Record<import('./types').ReviewPlatform, {
+  label: string;
+  color: string;
+}> = {
+  google: { label: 'Google', color: '#4285F4' },
+  yelp: { label: 'Yelp', color: '#D32323' },
+  facebook: { label: 'Facebook', color: '#1877F2' },
+  direct: { label: 'Direct', color: '#10B981' },
+  other: { label: 'Other', color: '#6B7280' },
+} as const;
+
+// ============================================================================
+// Campaign Status Configuration
+// ============================================================================
+
+export const CAMPAIGN_STATUS_CONFIG_NEW: Record<import('./types').CampaignStatus, {
+  label: string;
+  bgColor: string;
+  textColor: string;
+}> = {
+  draft: { label: 'Draft', bgColor: 'bg-gray-100', textColor: 'text-gray-800' },
+  scheduled: { label: 'Scheduled', bgColor: 'bg-blue-100', textColor: 'text-blue-800' },
+  active: { label: 'Active', bgColor: 'bg-green-100', textColor: 'text-green-800' },
+  paused: { label: 'Paused', bgColor: 'bg-amber-100', textColor: 'text-amber-800' },
+  completed: { label: 'Completed', bgColor: 'bg-slate-100', textColor: 'text-slate-800' },
+} as const;
+
+// ============================================================================
+// Estimate Status Configuration
+// ============================================================================
+
+export const ESTIMATE_STATUS_CONFIG: Record<import('./types').EstimateStatus, {
+  label: string;
+  bgColor: string;
+  textColor: string;
+}> = {
+  draft: { label: 'Draft', bgColor: 'bg-gray-100', textColor: 'text-gray-800' },
+  sent: { label: 'Sent', bgColor: 'bg-blue-100', textColor: 'text-blue-800' },
+  viewed: { label: 'Viewed', bgColor: 'bg-indigo-100', textColor: 'text-indigo-800' },
+  approved: { label: 'Approved', bgColor: 'bg-green-100', textColor: 'text-green-800' },
+  rejected: { label: 'Rejected', bgColor: 'bg-red-100', textColor: 'text-red-800' },
+  expired: { label: 'Expired', bgColor: 'bg-slate-100', textColor: 'text-slate-800' },
+} as const;
+
+// ============================================================================
+// Agreement Status Configuration
+// ============================================================================
+
+export const AGREEMENT_STATUS_CONFIG: Record<import('./types').AgreementStatus, {
+  label: string;
+  bgColor: string;
+  textColor: string;
+}> = {
+  active: { label: 'Active', bgColor: 'bg-green-100', textColor: 'text-green-800' },
+  expired: { label: 'Expired', bgColor: 'bg-slate-100', textColor: 'text-slate-800' },
+  canceled: { label: 'Canceled', bgColor: 'bg-red-100', textColor: 'text-red-800' },
+} as const;
+
+// ============================================================================
+// Technician Skills (garage door services)
+// ============================================================================
+
+export const TECHNICIAN_SKILLS = [
+  'installation', 'repair', 'maintenance', 'springs', 'openers',
+  'panels', 'weatherstripping', 'commercial', 'residential',
+  'emergency', 'electrical', 'framing',
+] as const;
+
+// ============================================================================
+// Inventory Categories
+// ============================================================================
+
+export const INVENTORY_CATEGORIES = [
+  'Springs', 'Panels', 'Openers', 'Hardware', 'Weatherstripping',
+  'Tracks & Rollers', 'Cables & Drums', 'Keypads & Remotes',
+  'Safety Equipment', 'Miscellaneous',
+] as const;
