@@ -4,6 +4,16 @@
 
 import { formatCents, formatDate, formatPhone } from '@murray-fsm/shared';
 
+/** Escape HTML special characters to prevent XSS */
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -108,7 +118,7 @@ export interface PaymentReceiptData {
  * Generate estimate email HTML
  */
 export function generateEstimateEmail(data: EstimateEmailData): { subject: string; html: string; text: string } {
-  const subject = `Estimate #${data.estimateNumber} from ${data.businessName}`;
+  const subject = `Estimate #${escapeHtml(data.estimateNumber)} from ${escapeHtml(data.businessName)}`;
 
   const html = `
 <!DOCTYPE html>
@@ -137,20 +147,20 @@ export function generateEstimateEmail(data: EstimateEmailData): { subject: strin
 <body>
   <div class="container">
     <div class="header">
-      <h1>${data.businessName}</h1>
+      <h1>${escapeHtml(data.businessName)}</h1>
     </div>
     <div class="content">
-      <p class="greeting">Hi ${data.customerName},</p>
+      <p class="greeting">Hi ${escapeHtml(data.customerName)},</p>
       <p>Thank you for requesting an estimate! Here's a summary of the work we discussed:</p>
 
       <div class="details">
         <div class="detail-row">
           <span class="detail-label">Estimate #</span>
-          <span class="detail-value">${data.estimateNumber}</span>
+          <span class="detail-value">${escapeHtml(data.estimateNumber)}</span>
         </div>
         <div class="detail-row">
           <span class="detail-label">Service</span>
-          <span class="detail-value">${data.jobTitle}</span>
+          <span class="detail-value">${escapeHtml(data.jobTitle)}</span>
         </div>
         <div class="detail-row total-row">
           <span class="detail-label">Estimated Total</span>
@@ -170,7 +180,7 @@ export function generateEstimateEmail(data: EstimateEmailData): { subject: strin
 
       <p>If you have any questions or would like to schedule the work, please don't hesitate to reach out!</p>
 
-      <p>Best regards,<br>${data.businessName}</p>
+      <p>Best regards,<br>${escapeHtml(data.businessName)}</p>
     </div>
     <div class="footer">
       <p>Questions? Call us at <a href="tel:${data.businessPhone}">${formatPhone(data.businessPhone)}</a></p>
@@ -181,12 +191,12 @@ export function generateEstimateEmail(data: EstimateEmailData): { subject: strin
 `;
 
   const text = `
-Hi ${data.customerName},
+Hi ${escapeHtml(data.customerName)},
 
 Thank you for requesting an estimate! Here's a summary:
 
-Estimate #: ${data.estimateNumber}
-Service: ${data.jobTitle}
+Estimate #: ${escapeHtml(data.estimateNumber)}
+Service: ${escapeHtml(data.jobTitle)}
 Estimated Total: ${formatCents(data.total)}
 ${data.validUntil ? `Valid Until: ${formatDate(data.validUntil)}` : ''}
 
@@ -195,7 +205,7 @@ View your full estimate here: ${data.estimateUrl}
 Questions? Call us at ${formatPhone(data.businessPhone)}
 
 Best regards,
-${data.businessName}
+${escapeHtml(data.businessName)}
 `;
 
   return { subject, html, text };
@@ -205,7 +215,7 @@ ${data.businessName}
  * Generate invoice email HTML
  */
 export function generateInvoiceEmail(data: InvoiceEmailData): { subject: string; html: string; text: string } {
-  const subject = `Invoice #${data.invoiceNumber} from ${data.businessName}`;
+  const subject = `Invoice #${escapeHtml(data.invoiceNumber)} from ${escapeHtml(data.businessName)}`;
 
   const html = `
 <!DOCTYPE html>
@@ -235,10 +245,10 @@ export function generateInvoiceEmail(data: InvoiceEmailData): { subject: string;
 <body>
   <div class="container">
     <div class="header">
-      <h1>${data.businessName}</h1>
+      <h1>${escapeHtml(data.businessName)}</h1>
     </div>
     <div class="content">
-      <p>Hi ${data.customerName},</p>
+      <p>Hi ${escapeHtml(data.customerName)},</p>
       <p>Thank you for choosing us! Please find your invoice below:</p>
 
       <div class="amount-due">
@@ -250,11 +260,11 @@ export function generateInvoiceEmail(data: InvoiceEmailData): { subject: string;
       <div class="details">
         <div class="detail-row">
           <span class="detail-label">Invoice #</span>
-          <span class="detail-value">${data.invoiceNumber}</span>
+          <span class="detail-value">${escapeHtml(data.invoiceNumber)}</span>
         </div>
         <div class="detail-row">
           <span class="detail-label">Service</span>
-          <span class="detail-value">${data.jobTitle}</span>
+          <span class="detail-value">${escapeHtml(data.jobTitle)}</span>
         </div>
         <div class="detail-row">
           <span class="detail-label">Total</span>
@@ -269,7 +279,7 @@ export function generateInvoiceEmail(data: InvoiceEmailData): { subject: string;
 
       <p>Thank you for your business!</p>
 
-      <p>Best regards,<br>${data.businessName}</p>
+      <p>Best regards,<br>${escapeHtml(data.businessName)}</p>
     </div>
     <div class="footer">
       <p>Questions? Call us at <a href="tel:${data.businessPhone}">${formatPhone(data.businessPhone)}</a></p>
@@ -280,12 +290,12 @@ export function generateInvoiceEmail(data: InvoiceEmailData): { subject: string;
 `;
 
   const text = `
-Hi ${data.customerName},
+Hi ${escapeHtml(data.customerName)},
 
 Thank you for choosing us! Please find your invoice below:
 
-Invoice #: ${data.invoiceNumber}
-Service: ${data.jobTitle}
+Invoice #: ${escapeHtml(data.invoiceNumber)}
+Service: ${escapeHtml(data.jobTitle)}
 Total: ${formatCents(data.total)}
 Amount Due: ${formatCents(data.amountDue)}
 ${data.dueDate ? `Due By: ${formatDate(data.dueDate)}` : ''}
@@ -296,7 +306,7 @@ View Invoice: ${data.invoiceUrl}
 Questions? Call us at ${formatPhone(data.businessPhone)}
 
 Best regards,
-${data.businessName}
+${escapeHtml(data.businessName)}
 `;
 
   return { subject, html, text };
@@ -306,7 +316,7 @@ ${data.businessName}
  * Generate appointment confirmation email
  */
 export function generateAppointmentEmail(data: AppointmentEmailData): { subject: string; html: string; text: string } {
-  const subject = `Appointment Confirmed: ${data.jobTitle}`;
+  const subject = `Appointment Confirmed: ${escapeHtml(data.jobTitle)}`;
 
   const html = `
 <!DOCTYPE html>
@@ -332,20 +342,20 @@ export function generateAppointmentEmail(data: AppointmentEmailData): { subject:
 <body>
   <div class="container">
     <div class="header">
-      <h1>${data.businessName}</h1>
+      <h1>${escapeHtml(data.businessName)}</h1>
     </div>
     <div class="content">
       <span class="confirmation-badge">Appointment Confirmed</span>
 
-      <p>Hi ${data.customerName},</p>
+      <p>Hi ${escapeHtml(data.customerName)},</p>
       <p>Your appointment has been scheduled!</p>
 
       <div class="appointment-card">
-        <div class="appointment-date">${data.scheduledDate}</div>
-        <div class="appointment-time">${data.scheduledTime}</div>
-        <div class="appointment-service"><strong>${data.jobTitle}</strong></div>
-        <div class="appointment-address">${data.address}</div>
-        ${data.technicianName ? `<div style="margin-top: 16px; color: #64748b;">Your technician: <strong>${data.technicianName}</strong></div>` : ''}
+        <div class="appointment-date">${escapeHtml(data.scheduledDate)}</div>
+        <div class="appointment-time">${escapeHtml(data.scheduledTime)}</div>
+        <div class="appointment-service"><strong>${escapeHtml(data.jobTitle)}</strong></div>
+        <div class="appointment-address">${escapeHtml(data.address)}</div>
+        ${data.technicianName ? `<div style="margin-top: 16px; color: #64748b;">Your technician: <strong>${escapeHtml(data.technicianName)}</strong></div>` : ''}
       </div>
 
       <p><strong>What to expect:</strong></p>
@@ -357,7 +367,7 @@ export function generateAppointmentEmail(data: AppointmentEmailData): { subject:
 
       <p>Need to reschedule? Call us at <a href="tel:${data.businessPhone}">${formatPhone(data.businessPhone)}</a></p>
 
-      <p>Thank you for choosing ${data.businessName}!</p>
+      <p>Thank you for choosing ${escapeHtml(data.businessName)}!</p>
     </div>
     <div class="footer">
       <p>Questions? Call us at <a href="tel:${data.businessPhone}">${formatPhone(data.businessPhone)}</a></p>
@@ -370,15 +380,15 @@ export function generateAppointmentEmail(data: AppointmentEmailData): { subject:
   const text = `
 APPOINTMENT CONFIRMED
 
-Hi ${data.customerName},
+Hi ${escapeHtml(data.customerName)},
 
 Your appointment has been scheduled!
 
-Date: ${data.scheduledDate}
-Time: ${data.scheduledTime}
-Service: ${data.jobTitle}
-Location: ${data.address}
-${data.technicianName ? `Technician: ${data.technicianName}` : ''}
+Date: ${escapeHtml(data.scheduledDate)}
+Time: ${escapeHtml(data.scheduledTime)}
+Service: ${escapeHtml(data.jobTitle)}
+Location: ${escapeHtml(data.address)}
+${data.technicianName ? `Technician: ${escapeHtml(data.technicianName)}` : ''}
 
 What to expect:
 - We'll send a reminder the day before your appointment
@@ -387,7 +397,7 @@ What to expect:
 
 Need to reschedule? Call us at ${formatPhone(data.businessPhone)}
 
-Thank you for choosing ${data.businessName}!
+Thank you for choosing ${escapeHtml(data.businessName)}!
 `;
 
   return { subject, html, text };
@@ -397,7 +407,7 @@ Thank you for choosing ${data.businessName}!
  * Generate payment receipt email
  */
 export function generatePaymentReceiptEmail(data: PaymentReceiptData): { subject: string; html: string; text: string } {
-  const subject = `Payment Receipt from ${data.businessName}`;
+  const subject = `Payment Receipt from ${escapeHtml(data.businessName)}`;
 
   const html = `
 <!DOCTYPE html>
@@ -429,7 +439,7 @@ export function generatePaymentReceiptEmail(data: PaymentReceiptData): { subject
     <div class="content">
       <span class="receipt-badge">Thank You!</span>
 
-      <p>Hi ${data.customerName},</p>
+      <p>Hi ${escapeHtml(data.customerName)},</p>
       <p>We've received your payment. Here's your receipt:</p>
 
       <div class="amount-paid">${formatCents(data.amountPaid)}</div>
@@ -437,11 +447,11 @@ export function generatePaymentReceiptEmail(data: PaymentReceiptData): { subject
       <div class="details">
         <div class="detail-row">
           <span class="detail-label">Invoice #</span>
-          <span class="detail-value">${data.invoiceNumber}</span>
+          <span class="detail-value">${escapeHtml(data.invoiceNumber)}</span>
         </div>
         <div class="detail-row">
           <span class="detail-label">Service</span>
-          <span class="detail-value">${data.jobTitle}</span>
+          <span class="detail-value">${escapeHtml(data.jobTitle)}</span>
         </div>
         <div class="detail-row">
           <span class="detail-label">Payment Date</span>
@@ -449,13 +459,13 @@ export function generatePaymentReceiptEmail(data: PaymentReceiptData): { subject
         </div>
         <div class="detail-row">
           <span class="detail-label">Payment Method</span>
-          <span class="detail-value">${data.paymentMethod}</span>
+          <span class="detail-value">${escapeHtml(data.paymentMethod)}</span>
         </div>
       </div>
 
-      <p>Thank you for your business! We appreciate you choosing ${data.businessName}.</p>
+      <p>Thank you for your business! We appreciate you choosing ${escapeHtml(data.businessName)}.</p>
 
-      <p>Best regards,<br>${data.businessName}</p>
+      <p>Best regards,<br>${escapeHtml(data.businessName)}</p>
     </div>
     <div class="footer">
       <p>Questions? Call us at <a href="tel:${data.businessPhone}">${formatPhone(data.businessPhone)}</a></p>
@@ -468,20 +478,20 @@ export function generatePaymentReceiptEmail(data: PaymentReceiptData): { subject
   const text = `
 PAYMENT RECEIVED
 
-Hi ${data.customerName},
+Hi ${escapeHtml(data.customerName)},
 
 We've received your payment. Here's your receipt:
 
 Amount Paid: ${formatCents(data.amountPaid)}
-Invoice #: ${data.invoiceNumber}
-Service: ${data.jobTitle}
+Invoice #: ${escapeHtml(data.invoiceNumber)}
+Service: ${escapeHtml(data.jobTitle)}
 Payment Date: ${formatDate(data.paymentDate)}
-Payment Method: ${data.paymentMethod}
+Payment Method: ${escapeHtml(data.paymentMethod)}
 
 Thank you for your business!
 
 Best regards,
-${data.businessName}
+${escapeHtml(data.businessName)}
 
 Questions? Call us at ${formatPhone(data.businessPhone)}
 `;

@@ -311,7 +311,6 @@ export function generateJobFromRecurring(
     scheduledDate = setHours(startOfDay(occurrenceDate), 9);
   }
 
-  const scheduledEnd = addDays(scheduledDate, 0); // clone
   const endDate = new Date(
     scheduledDate.getTime() + recurringJob.duration_minutes * 60 * 1000
   );

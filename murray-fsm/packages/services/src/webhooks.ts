@@ -84,10 +84,11 @@ export function verifyWebhookSignature(
   secret: string
 ): boolean {
   const expectedSignature = generateWebhookSignature(payload, secret);
-  return crypto.timingSafeEqual(
-    Buffer.from(signature),
-    Buffer.from(expectedSignature)
-  );
+  const sigBuffer = Buffer.from(signature);
+  const expectedBuffer = Buffer.from(expectedSignature);
+  // timingSafeEqual throws RangeError if lengths differ
+  if (sigBuffer.length !== expectedBuffer.length) return false;
+  return crypto.timingSafeEqual(sigBuffer, expectedBuffer);
 }
 
 /**

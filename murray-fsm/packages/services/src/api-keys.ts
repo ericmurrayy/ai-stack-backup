@@ -193,10 +193,9 @@ export function createInMemoryRateLimiter(): RateLimiter {
   }
 
   return {
-    async check(keyId: string): Promise<RateLimitInfo> {
+    async check(keyId: string, keyRateLimit?: number): Promise<RateLimitInfo> {
       const entry = getOrCreate(keyId);
-      // Default 100 requests per minute
-      const limit = 100;
+      const limit = keyRateLimit ?? 100;
       return {
         allowed: entry.count < limit,
         remaining: Math.max(0, limit - entry.count),

@@ -168,7 +168,7 @@ export function formatScheduleLabel(dateString: string | null): string {
  * @returns Formatted duration string (e.g., "2h 30m")
  */
 export function formatDuration(seconds: number | null): string {
-  if (!seconds) return '';
+  if (seconds == null) return '';
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   const secs = seconds % 60;
@@ -184,7 +184,7 @@ export function formatDuration(seconds: number | null): string {
  * @returns Formatted duration string (e.g., "2h 30m")
  */
 export function formatMinutes(minutes: number | null): string {
-  if (!minutes) return '';
+  if (minutes == null) return '';
   const hours = Math.floor(minutes / 60);
   const mins = minutes % 60;
 
