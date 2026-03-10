@@ -16,7 +16,6 @@ import {
   Check,
   AlertCircle,
   ChevronRight,
-  Shield,
   Zap,
   CreditCard,
   MessageSquare,
@@ -26,8 +25,6 @@ import {
   Bot,
   MoreVertical,
   Copy,
-  Eye,
-  EyeOff,
   RefreshCw,
   Trash2,
 } from 'lucide-react';

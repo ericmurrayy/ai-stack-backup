@@ -7,7 +7,7 @@ import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { formatScheduleLabel, jobStatusConfig, serviceCategoryConfig, urgencyConfig } from '@/lib/utils';
-import { Calendar, Plus, User, Wrench } from 'lucide-react';
+import { Calendar, Plus } from 'lucide-react';
 import Link from 'next/link';
 
 interface JobTechnician {

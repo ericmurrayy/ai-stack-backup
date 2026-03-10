@@ -6,7 +6,7 @@ import { Header } from '@/components/layout/Header';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { formatCents, formatRelativeTime, paymentStatusConfig } from '@/lib/utils';
-import { CreditCard, DollarSign, CheckCircle, Clock, XCircle } from 'lucide-react';
+import { CreditCard, DollarSign } from 'lucide-react';
 import type { Payment, Job } from '@/types/database';
 
 interface PaymentWithJob extends Payment {
