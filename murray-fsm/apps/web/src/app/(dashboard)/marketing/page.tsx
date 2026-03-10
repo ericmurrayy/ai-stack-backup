@@ -29,14 +29,15 @@ import {
 interface Campaign {
   id: string;
   name: string;
-  status: 'draft' | 'scheduled' | 'active' | 'paused' | 'completed';
-  campaign_type: 'email' | 'sms' | 'both';
-  total_recipients: number;
-  total_sent: number;
-  total_opened: number;
-  total_clicked: number;
-  total_converted: number;
-  scheduled_at?: string;
+  description: string | null;
+  type: string;
+  status: string;
+  template_subject: string | null;
+  template_body: string | null;
+  scheduled_at: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  stats: { sent: number; delivered: number; opened: number; clicked: number; converted: number };
   created_at: string;
 }
 
@@ -50,65 +51,21 @@ interface Referral {
 }
 
 async function getMarketingData() {
-  // In production, fetch from Supabase
-  const campaigns: Campaign[] = [
-    {
-      id: '1',
-      name: 'Spring Maintenance Special',
-      status: 'active',
-      campaign_type: 'both',
-      total_recipients: 450,
-      total_sent: 450,
-      total_opened: 180,
-      total_clicked: 45,
-      total_converted: 12,
-      created_at: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-    },
-    {
-      id: '2',
-      name: 'Re-engagement Campaign',
-      status: 'scheduled',
-      campaign_type: 'email',
-      total_recipients: 200,
-      total_sent: 0,
-      total_opened: 0,
-      total_clicked: 0,
-      total_converted: 0,
-      scheduled_at: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
-      created_at: new Date().toISOString(),
-    },
-    {
-      id: '3',
-      name: 'Holiday Discount Offer',
-      status: 'completed',
-      campaign_type: 'sms',
-      total_recipients: 380,
-      total_sent: 380,
-      total_opened: 320,
-      total_clicked: 89,
-      total_converted: 23,
-      created_at: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-    },
-  ];
+  const supabase = await createClient();
 
-  const referrals: Referral[] = [
-    {
-      id: '1',
-      referrer_name: 'John Smith',
-      referred_name: 'Mary Johnson',
-      status: 'converted',
-      referrer_reward_cents: 5000,
-      created_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-    },
-    {
-      id: '2',
-      referrer_name: 'Jane Doe',
-      referred_name: 'Bob Wilson',
-      status: 'contacted',
-      referrer_reward_cents: 5000,
-      created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-    },
-  ];
+  const { data } = await supabase
+    .from('campaigns')
+    .select('id, name, description, type, status, template_subject, template_body, scheduled_at, started_at, completed_at, stats, created_at')
+    .eq('deleted', false)
+    .order('created_at', { ascending: false });
+
+  const campaigns: Campaign[] = (data || []).map((c: any) => ({
+    ...c,
+    stats: c.stats || { sent: 0, delivered: 0, opened: 0, clicked: 0, converted: 0 },
+  }));
+
+  // Keep referrals as empty for now (no referrals table yet)
+  const referrals: Referral[] = [];
 
   return { campaigns, referrals };
 }
@@ -129,14 +86,14 @@ const referralStatusColors: Record<string, string> = {
 };
 
 function CampaignCard({ campaign }: { campaign: Campaign }) {
-  const openRate = campaign.total_sent > 0
-    ? Math.round((campaign.total_opened / campaign.total_sent) * 100)
+  const openRate = campaign.stats.sent > 0
+    ? Math.round((campaign.stats.opened / campaign.stats.sent) * 100)
     : 0;
-  const clickRate = campaign.total_opened > 0
-    ? Math.round((campaign.total_clicked / campaign.total_opened) * 100)
+  const clickRate = campaign.stats.opened > 0
+    ? Math.round((campaign.stats.clicked / campaign.stats.opened) * 100)
     : 0;
-  const conversionRate = campaign.total_clicked > 0
-    ? Math.round((campaign.total_converted / campaign.total_clicked) * 100)
+  const conversionRate = campaign.stats.clicked > 0
+    ? Math.round((campaign.stats.converted / campaign.stats.clicked) * 100)
     : 0;
 
   return (
@@ -144,13 +101,13 @@ function CampaignCard({ campaign }: { campaign: Campaign }) {
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">
           <div className={`p-2 rounded-lg ${
-            campaign.campaign_type === 'email' ? 'bg-blue-50' :
-            campaign.campaign_type === 'sms' ? 'bg-green-50' :
+            campaign.type === 'email' ? 'bg-blue-50' :
+            campaign.type === 'sms' ? 'bg-green-50' :
             'bg-purple-50'
           }`}>
-            {campaign.campaign_type === 'email' ? (
+            {campaign.type === 'email' ? (
               <Mail className="w-5 h-5 text-blue-600" />
-            ) : campaign.campaign_type === 'sms' ? (
+            ) : campaign.type === 'sms' ? (
               <MessageSquare className="w-5 h-5 text-green-600" />
             ) : (
               <Zap className="w-5 h-5 text-purple-600" />
@@ -160,7 +117,7 @@ function CampaignCard({ campaign }: { campaign: Campaign }) {
             <h3 className="font-semibold text-slate-900">{campaign.name}</h3>
             <div className="flex items-center gap-2 text-sm text-slate-500">
               <Badge className={statusColors[campaign.status]}>{campaign.status}</Badge>
-              <span>{campaign.total_recipients} recipients</span>
+              <span>{campaign.description || `${campaign.stats.sent} sent`}</span>
             </div>
           </div>
         </div>
@@ -186,7 +143,7 @@ function CampaignCard({ campaign }: { campaign: Campaign }) {
         <div className="flex items-center gap-2">
           <Send className="w-4 h-4 text-slate-400" />
           <div>
-            <div className="font-semibold text-slate-900">{campaign.total_sent}</div>
+            <div className="font-semibold text-slate-900">{campaign.stats.sent}</div>
             <div className="text-xs text-slate-500">Sent</div>
           </div>
         </div>
@@ -207,7 +164,7 @@ function CampaignCard({ campaign }: { campaign: Campaign }) {
         <div className="flex items-center gap-2">
           <CheckCircle className="w-4 h-4 text-slate-400" />
           <div>
-            <div className="font-semibold text-green-600">{campaign.total_converted}</div>
+            <div className="font-semibold text-green-600">{campaign.stats.converted}</div>
             <div className="text-xs text-slate-500">Conversions</div>
           </div>
         </div>
@@ -220,8 +177,8 @@ export default async function MarketingPage() {
   const { campaigns, referrals } = await getMarketingData();
 
   const activeCampaigns = campaigns.filter(c => c.status === 'active').length;
-  const totalSent = campaigns.reduce((sum, c) => sum + c.total_sent, 0);
-  const totalConversions = campaigns.reduce((sum, c) => sum + c.total_converted, 0);
+  const totalSent = campaigns.reduce((sum, c) => sum + c.stats.sent, 0);
+  const totalConversions = campaigns.reduce((sum, c) => sum + c.stats.converted, 0);
   const pendingReferrals = referrals.filter(r => r.status === 'pending').length;
 
   return (

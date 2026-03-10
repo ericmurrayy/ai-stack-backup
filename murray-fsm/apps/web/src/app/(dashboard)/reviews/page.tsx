@@ -23,70 +23,39 @@ import {
 interface Review {
   id: string;
   platform: string;
-  reviewer_name: string;
+  reviewer_name: string | null;
   rating: number;
-  title?: string;
-  content: string;
-  review_date: string;
-  response?: string;
-  response_date?: string;
-  sentiment: 'positive' | 'neutral' | 'negative';
-  review_url?: string;
+  review_text: string | null;
+  response_text: string | null;
+  responded_at: string | null;
+  review_url: string | null;
+  reviewed_at: string;
+  created_at: string;
 }
 
 async function getReviewsData() {
-  // In production, fetch from Supabase
-  const reviews: Review[] = [
-    {
-      id: '1',
-      platform: 'google',
-      reviewer_name: 'John Smith',
-      rating: 5,
-      title: 'Excellent service!',
-      content: 'Mike was fantastic! He arrived on time, explained everything clearly, and fixed my garage door quickly. Highly recommend!',
-      review_date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-      response: 'Thank you John! We appreciate your kind words and are glad we could help.',
-      response_date: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-      sentiment: 'positive',
-      review_url: 'https://google.com/review/123',
-    },
-    {
-      id: '2',
-      platform: 'yelp',
-      reviewer_name: 'Sarah Johnson',
-      rating: 5,
-      content: 'Best garage door service in Austin! They were professional, affordable, and did a great job on my new opener installation.',
-      review_date: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-      sentiment: 'positive',
-    },
-    {
-      id: '3',
-      platform: 'google',
-      reviewer_name: 'Mike Davis',
-      rating: 4,
-      content: 'Good service overall. The technician was knowledgeable and fixed the problem. Only minor issue was arrival was about 30 minutes late.',
-      review_date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-      sentiment: 'positive',
-    },
-    {
-      id: '4',
-      platform: 'facebook',
-      reviewer_name: 'Lisa Brown',
-      rating: 3,
-      content: 'Service was okay but pricing seemed higher than quoted. Would like more transparency on final costs.',
-      review_date: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
-      sentiment: 'neutral',
-    },
-  ];
+  const supabase = createClient();
+
+  const { data } = await supabase
+    .from('reviews')
+    .select('id, platform, reviewer_name, rating, review_text, response_text, responded_at, review_url, reviewed_at, created_at')
+    .eq('deleted', false)
+    .order('reviewed_at', { ascending: false });
+
+  const reviews: Review[] = data || [];
 
   const stats = {
     totalReviews: reviews.length,
-    averageRating: reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length,
-    responseRate: reviews.filter(r => r.response).length / reviews.length * 100,
-    positive: reviews.filter(r => r.sentiment === 'positive').length,
-    neutral: reviews.filter(r => r.sentiment === 'neutral').length,
-    negative: reviews.filter(r => r.sentiment === 'negative').length,
-    needsResponse: reviews.filter(r => !r.response).length,
+    averageRating: reviews.length > 0
+      ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
+      : 0,
+    responseRate: reviews.length > 0
+      ? reviews.filter(r => r.response_text).length / reviews.length * 100
+      : 0,
+    positive: reviews.filter(r => r.rating >= 4).length,
+    neutral: reviews.filter(r => r.rating === 3).length,
+    negative: reviews.filter(r => r.rating <= 2).length,
+    needsResponse: reviews.filter(r => !r.response_text).length,
   };
 
   return { reviews, stats };
@@ -120,18 +89,18 @@ function ReviewCard({ review }: { review: Review }) {
       <div className="flex items-start justify-between">
         <div className="flex items-start gap-3">
           <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-semibold">
-            {review.reviewer_name.split(' ').map(n => n[0]).join('')}
+            {(review.reviewer_name || 'A').split(' ').map(n => n[0]).join('')}
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-semibold text-slate-900">{review.reviewer_name}</span>
+              <span className="font-semibold text-slate-900">{review.reviewer_name || 'Anonymous'}</span>
               <Badge className={platformColors[review.platform]}>
                 {review.platform}
               </Badge>
             </div>
             <div className="flex items-center gap-2 mt-1">
               <StarRating rating={review.rating} />
-              <span className="text-sm text-slate-500">{formatRelativeTime(review.review_date)}</span>
+              <span className="text-sm text-slate-500">{formatRelativeTime(review.reviewed_at)}</span>
             </div>
           </div>
         </div>
@@ -147,17 +116,14 @@ function ReviewCard({ review }: { review: Review }) {
         )}
       </div>
 
-      {review.title && (
-        <h4 className="font-medium text-slate-900 mt-3">{review.title}</h4>
-      )}
-      <p className="text-slate-600 mt-2">{review.content}</p>
+      <p className="text-slate-600 mt-2">{review.review_text}</p>
 
-      {review.response ? (
+      {review.response_text ? (
         <div className="mt-4 p-3 bg-blue-50 rounded-lg border-l-4 border-blue-500">
           <div className="text-sm font-medium text-blue-800 mb-1">Your Response</div>
-          <p className="text-sm text-blue-700">{review.response}</p>
+          <p className="text-sm text-blue-700">{review.response_text}</p>
           <div className="text-xs text-blue-600 mt-2">
-            Responded {formatRelativeTime(review.response_date!)}
+            Responded {formatRelativeTime(review.responded_at!)}
           </div>
         </div>
       ) : (

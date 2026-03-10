@@ -4,9 +4,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { Header } from '@/components/layout/Header';
-import { Card } from '@/components/ui/Card';
-import { Badge } from '@/components/ui/Badge';
-import { formatCents, formatRelativeTime } from '@/lib/utils';
+import { formatCents } from '@/lib/utils';
 import {
   Plus,
   Phone,
@@ -17,7 +15,6 @@ import {
   MoreVertical,
   ArrowRight,
   TrendingUp,
-  Clock,
 } from 'lucide-react';
 
 interface PipelineStage {
@@ -37,12 +34,11 @@ interface Lead {
   customer_email?: string;
   estimated_value_cents: number;
   probability: number;
-  score: number;
   source?: string;
-  next_follow_up_at?: string;
-  last_contact_at?: string;
+  expected_close_date?: string | null;
+  assigned_technician_id?: string | null;
   created_at: string;
-  tags: string[];
+  updated_at: string;
 }
 
 interface StageWithLeads extends PipelineStage {
@@ -65,11 +61,12 @@ async function getPipelineData(): Promise<StageWithLeads[]> {
   const { data: leads } = await supabase
     .from('leads')
     .select(`
-      *,
+      id, title, customer_id, estimated_value_cents, probability, source,
+      expected_close_date, assigned_technician_id, stage_id, created_at, updated_at,
       customer:customers(name, phone, email)
     `)
     .eq('deleted', false)
-    .order('score', { ascending: false });
+    .order('estimated_value_cents', { ascending: false });
 
   // If no stages exist, return defaults
   const defaultStages: PipelineStage[] = stages?.length ? stages : [
@@ -84,8 +81,8 @@ async function getPipelineData(): Promise<StageWithLeads[]> {
   // Group leads by stage
   return defaultStages.map((stage) => {
     const stageLeads = (leads || [])
-      .filter((l) => l.stage_id === stage.id)
-      .map((l) => ({
+      .filter((l: any) => l.stage_id === stage.id)
+      .map((l: any) => ({
         id: l.id,
         title: l.title,
         customer_name: l.customer?.name,
@@ -93,27 +90,26 @@ async function getPipelineData(): Promise<StageWithLeads[]> {
         customer_email: l.customer?.email,
         estimated_value_cents: l.estimated_value_cents || 0,
         probability: l.probability || 50,
-        score: l.score || 0,
         source: l.source,
-        next_follow_up_at: l.next_follow_up_at,
-        last_contact_at: l.last_contact_at,
+        expected_close_date: l.expected_close_date,
+        assigned_technician_id: l.assigned_technician_id,
         created_at: l.created_at,
-        tags: l.tags || [],
+        updated_at: l.updated_at,
       }));
 
     return {
       ...stage,
       leads: stageLeads,
-      total_value: stageLeads.reduce((sum, l) => sum + l.estimated_value_cents, 0),
+      total_value: stageLeads.reduce((sum: number, l: any) => sum + l.estimated_value_cents, 0),
       lead_count: stageLeads.length,
     };
   });
 }
 
 function LeadCard({ lead }: { lead: Lead }) {
-  const scoreColor =
-    lead.score >= 80 ? 'text-green-600 bg-green-50' :
-    lead.score >= 50 ? 'text-yellow-600 bg-yellow-50' :
+  const probColor =
+    lead.probability >= 70 ? 'text-green-600 bg-green-50' :
+    lead.probability >= 40 ? 'text-yellow-600 bg-yellow-50' :
     'text-gray-600 bg-gray-50';
 
   return (
@@ -138,41 +134,19 @@ function LeadCard({ lead }: { lead: Lead }) {
         <span className="text-sm font-semibold text-slate-900">
           {formatCents(lead.estimated_value_cents)}
         </span>
-        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${scoreColor}`}>
-          Score: {lead.score}
+        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${probColor}`}>
+          {lead.probability}%
         </span>
       </div>
 
       <div className="flex items-center gap-2 text-xs text-slate-500">
-        {lead.next_follow_up_at && (
+        {lead.source && (
           <div className="flex items-center gap-1">
-            <Clock className="w-3 h-3" />
-            <span>{formatRelativeTime(lead.next_follow_up_at)}</span>
-          </div>
-        )}
-        {lead.probability && (
-          <div className="flex items-center gap-1 ml-auto">
             <TrendingUp className="w-3 h-3" />
-            <span>{lead.probability}%</span>
+            <span>{lead.source}</span>
           </div>
         )}
       </div>
-
-      {lead.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1 mt-2">
-          {lead.tags.slice(0, 2).map((tag) => (
-            <span
-              key={tag}
-              className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded"
-            >
-              {tag}
-            </span>
-          ))}
-          {lead.tags.length > 2 && (
-            <span className="text-xs text-slate-400">+{lead.tags.length - 2}</span>
-          )}
-        </div>
-      )}
 
       <div className="flex items-center gap-1 mt-3 pt-2 border-t border-slate-100">
         <button className="p-1.5 hover:bg-slate-100 rounded transition-colors" title="Call">

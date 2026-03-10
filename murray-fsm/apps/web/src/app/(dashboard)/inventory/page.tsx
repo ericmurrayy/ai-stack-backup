@@ -24,99 +24,36 @@ import {
 
 interface InventoryItem {
   id: string;
-  sku: string;
+  sku: string | null;
   name: string;
-  category: string;
-  quantity_on_hand: number;
+  category: string | null;
+  qty_on_hand: number;
+  qty_reserved: number;
   reorder_point: number;
+  reorder_qty: number;
   cost_cents: number;
   price_cents: number;
-  supplier: string;
+  vendor: string | null;
+  vendor_part_number: string | null;
+  location_in_shop: string | null;
   is_active: boolean;
 }
 
 async function getInventoryData() {
-  // In production, fetch from Supabase
-  const items: InventoryItem[] = [
-    {
-      id: '1',
-      sku: 'SPR-001',
-      name: 'Torsion Spring (Standard)',
-      category: 'Springs',
-      quantity_on_hand: 12,
-      reorder_point: 5,
-      cost_cents: 4500,
-      price_cents: 12500,
-      supplier: 'ABC Parts Co.',
-      is_active: true,
-    },
-    {
-      id: '2',
-      sku: 'SPR-002',
-      name: 'Torsion Spring (Heavy Duty)',
-      category: 'Springs',
-      quantity_on_hand: 4,
-      reorder_point: 5,
-      cost_cents: 6500,
-      price_cents: 17500,
-      supplier: 'ABC Parts Co.',
-      is_active: true,
-    },
-    {
-      id: '3',
-      sku: 'OPN-001',
-      name: 'Belt Drive Opener',
-      category: 'Openers',
-      quantity_on_hand: 3,
-      reorder_point: 3,
-      cost_cents: 18000,
-      price_cents: 35000,
-      supplier: 'LiftMaster Dist.',
-      is_active: true,
-    },
-    {
-      id: '4',
-      sku: 'RLR-001',
-      name: 'Nylon Roller (10-pack)',
-      category: 'Rollers',
-      quantity_on_hand: 25,
-      reorder_point: 10,
-      cost_cents: 2500,
-      price_cents: 7500,
-      supplier: 'ABC Parts Co.',
-      is_active: true,
-    },
-    {
-      id: '5',
-      sku: 'PNL-001',
-      name: 'Steel Panel Section',
-      category: 'Panels',
-      quantity_on_hand: 2,
-      reorder_point: 4,
-      cost_cents: 15000,
-      price_cents: 32500,
-      supplier: 'Clopay Dist.',
-      is_active: true,
-    },
-    {
-      id: '6',
-      sku: 'CBL-001',
-      name: 'Lift Cable Set',
-      category: 'Cables',
-      quantity_on_hand: 8,
-      reorder_point: 5,
-      cost_cents: 3500,
-      price_cents: 9500,
-      supplier: 'ABC Parts Co.',
-      is_active: true,
-    },
-  ];
+  const supabase = createClient();
 
-  const lowStock = items.filter(i => i.quantity_on_hand <= i.reorder_point);
-  const totalValue = items.reduce((sum, i) => sum + (i.quantity_on_hand * i.cost_cents), 0);
-  const categories = Array.from(new Set(items.map(i => i.category)));
+  const { data: items } = await supabase
+    .from('inventory_items')
+    .select('id, sku, name, category, qty_on_hand, qty_reserved, reorder_point, reorder_qty, cost_cents, price_cents, vendor, vendor_part_number, location_in_shop, is_active')
+    .eq('deleted', false)
+    .order('name');
 
-  return { items, lowStock, totalValue, categories };
+  const allItems: InventoryItem[] = items || [];
+  const lowStock = allItems.filter(i => i.qty_on_hand <= i.reorder_point);
+  const totalValue = allItems.reduce((sum, i) => sum + (i.qty_on_hand * i.cost_cents), 0);
+  const categories = Array.from(new Set(allItems.map(i => i.category).filter(Boolean))) as string[];
+
+  return { items: allItems, lowStock, totalValue, categories };
 }
 
 function InventoryTable({ items }: { items: InventoryItem[] }) {
@@ -155,16 +92,16 @@ function InventoryTable({ items }: { items: InventoryItem[] }) {
           </thead>
           <tbody className="divide-y divide-slate-200">
             {items.map((item) => {
-              const margin = item.cost_cents > 0
-                ? Math.round(((item.price_cents - item.cost_cents) / item.cost_cents) * 100)
+              const margin = item.price_cents > 0
+                ? Math.round(((item.price_cents - item.cost_cents) / item.price_cents) * 100)
                 : 0;
-              const isLowStock = item.quantity_on_hand <= item.reorder_point;
+              const isLowStock = item.qty_on_hand <= item.reorder_point;
 
               return (
                 <tr key={item.id} className="hover:bg-slate-50">
                   <td className="px-6 py-4">
                     <div className="font-medium text-slate-900">{item.name}</div>
-                    <div className="text-sm text-slate-500">{item.supplier}</div>
+                    <div className="text-sm text-slate-500">{item.vendor || 'No vendor'}</div>
                   </td>
                   <td className="px-6 py-4">
                     <code className="text-sm bg-slate-100 px-2 py-0.5 rounded">
@@ -174,7 +111,7 @@ function InventoryTable({ items }: { items: InventoryItem[] }) {
                   <td className="px-6 py-4 text-slate-600">{item.category}</td>
                   <td className="px-6 py-4 text-right">
                     <span className={`font-medium ${isLowStock ? 'text-red-600' : 'text-slate-900'}`}>
-                      {item.quantity_on_hand}
+                      {item.qty_on_hand}
                     </span>
                     {isLowStock && (
                       <AlertTriangle className="w-4 h-4 text-red-500 inline ml-1" />

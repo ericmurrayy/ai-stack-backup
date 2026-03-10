@@ -24,12 +24,11 @@ import {
 
 interface TeamMember {
   id: string;
-  full_name: string;
-  email: string;
-  phone?: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
   role: string;
   color: string;
-  avatar_url?: string;
   skills: string[];
   is_active: boolean;
   hourly_rate_cents: number;
@@ -38,58 +37,54 @@ interface TeamMember {
   jobs_this_week: number;
   revenue_this_month: number;
   avg_rating: number;
-  on_time_rate: number;
 }
 
 async function getTeamData(): Promise<TeamMember[]> {
   const supabase = createClient();
 
-  // Get team members
   const { data: members } = await supabase
-    .from('team_members')
-    .select('*')
+    .from('technicians')
+    .select('id, name, email, phone, role, color, skills, is_active, hourly_rate_cents')
     .eq('deleted', false)
-    .order('full_name');
+    .order('name');
 
   if (!members?.length) {
-    // Return demo data if no team members exist
     return [
       {
         id: '1',
-        full_name: 'Mike Johnson',
+        name: 'Mike Johnson',
         email: 'mike@example.com',
         phone: '+15551234567',
         role: 'technician',
         color: '#3b82f6',
-        skills: ['Garage Door Repair', 'Spring Replacement', 'Opener Installation'],
+        skills: ['springs', 'repair', 'openers'],
         is_active: true,
         hourly_rate_cents: 2500,
         jobs_today: 3,
         jobs_this_week: 12,
         revenue_this_month: 875000,
         avg_rating: 4.8,
-        on_time_rate: 94,
       },
       {
         id: '2',
-        full_name: 'Sarah Williams',
+        name: 'Sarah Williams',
         email: 'sarah@example.com',
         phone: '+15559876543',
         role: 'technician',
         color: '#22c55e',
-        skills: ['Garage Door Installation', 'Panel Replacement'],
+        skills: ['installation', 'panels'],
         is_active: true,
         hourly_rate_cents: 2800,
         jobs_today: 2,
         jobs_this_week: 10,
         revenue_this_month: 920000,
         avg_rating: 4.9,
-        on_time_rate: 98,
       },
       {
         id: '3',
-        full_name: 'Tom Davis',
+        name: 'Tom Davis',
         email: 'tom@example.com',
+        phone: null,
         role: 'dispatcher',
         color: '#f59e0b',
         skills: [],
@@ -99,19 +94,16 @@ async function getTeamData(): Promise<TeamMember[]> {
         jobs_this_week: 0,
         revenue_this_month: 0,
         avg_rating: 0,
-        on_time_rate: 0,
       },
     ];
   }
 
-  // In production, would join with jobs/time_entries for real stats
-  return members.map((m) => ({
+  return members.map((m: any) => ({
     ...m,
     jobs_today: 0,
     jobs_this_week: 0,
     revenue_this_month: 0,
     avg_rating: 0,
-    on_time_rate: 0,
   }));
 }
 
@@ -132,13 +124,13 @@ function TeamMemberCard({ member }: { member: TeamMember }) {
           className="w-12 h-12 rounded-full flex items-center justify-center text-white font-semibold text-lg"
           style={{ backgroundColor: member.color }}
         >
-          {member.full_name.split(' ').map(n => n[0]).join('')}
+          {member.name.split(' ').map(n => n[0]).join('')}
         </div>
 
         {/* Info */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <h3 className="font-semibold text-slate-900 truncate">{member.full_name}</h3>
+            <h3 className="font-semibold text-slate-900 truncate">{member.name}</h3>
             <Badge className={roleColors[member.role] || roleColors.office}>
               {member.role}
             </Badge>
