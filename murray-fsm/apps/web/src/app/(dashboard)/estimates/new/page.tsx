@@ -438,6 +438,7 @@ export default function NewEstimatePage() {
         <div className="flex items-center gap-3">
           <button
             onClick={() => router.back()}
+            aria-label="Go back"
             className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
           >
             <ArrowLeft className="w-5 h-5 text-slate-500" />
@@ -496,10 +497,11 @@ export default function NewEstimatePage() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
+            <label htmlFor="validDays" className="block text-sm font-medium text-slate-700 mb-1">
               Valid for (days)
             </label>
             <input
+              id="validDays"
               type="number"
               value={validDays}
               onChange={(e) => setValidDays(parseInt(e.target.value) || 30)}

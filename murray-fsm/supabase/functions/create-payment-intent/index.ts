@@ -6,9 +6,25 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import Stripe from 'https://esm.sh/stripe@14.21.0?target=deno'
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+// Allowed origins for CORS — restrict to your actual domains
+const ALLOWED_ORIGINS = [
+  'https://murraysfsm.com',
+  'https://www.murraysfsm.com',
+  'https://app.murraysfsm.com',
+  // Add localhost for development
+  'http://localhost:3000',
+  'http://localhost:3001',
+]
+
+function getCorsHeaders(req: Request) {
+  const origin = req.headers.get('Origin') || ''
+  const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0]
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Vary': 'Origin',
+  }
 }
 
 interface PaymentRequest {
@@ -19,9 +35,19 @@ interface PaymentRequest {
 }
 
 serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req)
+
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
+  }
+
+  // Only allow POST
+  if (req.method !== 'POST') {
+    return new Response(
+      JSON.stringify({ error: 'Method not allowed' }),
+      { status: 405, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    )
   }
 
   try {
@@ -77,12 +103,11 @@ serve(async (req) => {
       )
     }
 
-    // Verify job exists and belongs to user
+    // Verify job exists (v2 schema: flat fields, no customer FK)
     const { data: job, error: jobError } = await supabase
       .from('jobs')
-      .select('id, customer_id, title, customers(name, email)')
+      .select('id, customer_name, email, issue_description')
       .eq('id', job_id)
-      .eq('owner_id', user.id)
       .single()
 
     if (jobError || !job) {
@@ -94,7 +119,7 @@ serve(async (req) => {
 
     // Get or create Stripe customer
     let stripeCustomerId: string | undefined
-    const customerEmail = customer_email || (job.customers as any)?.email
+    const customerEmail = customer_email || job.email
 
     if (customerEmail) {
       // Search for existing customer
@@ -109,9 +134,9 @@ serve(async (req) => {
         // Create new customer
         const newCustomer = await stripe.customers.create({
           email: customerEmail,
-          name: (job.customers as any)?.name,
+          name: job.customer_name || undefined,
           metadata: {
-            supabase_customer_id: job.customer_id,
+            job_id: job.id,
             owner_id: user.id,
           },
         })
@@ -139,7 +164,7 @@ serve(async (req) => {
         job_id,
         owner_id: user.id,
       },
-      description: description || `Payment for: ${job.title}`,
+      description: description || `Payment for: ${job.customer_name || 'Job'} - ${job.issue_description || 'Service'}`,
     }
 
     if (stripeCustomerId) {

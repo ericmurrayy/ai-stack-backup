@@ -1,0 +1,17 @@
+Progress: resolved 0, reused 1, downloaded 0, added 0
+apps/mobile                              |  WARN  deprecated eslint@8.57.1
+D:\murrayfsm\murray-fsm-repo\murray-fsm\apps\mobile:
+ ERR_PNPM_NO_MATCHING_VERSION  No matching version found for @legendapp/state@3.0.0-rc.12
+
+This error happened while installing a direct dependency of D:\murrayfsm\murray-fsm-repo\murray-fsm\apps\mobile
+
+The latest release of @legendapp/state is "2.1.15".
+
+Other releases are:
+  * rc: 1.0.0-rc.34
+  * next: 2.2.0-next.97
+  * alpha: 3.0.0-alpha.42
+  * beta: 3.0.0-beta.45
+
+If you need the full list of all 567 published versions run "$ pnpm view @legendapp/state versions".
+apps/web                                 |  WARN  deprecated next@14.2.3

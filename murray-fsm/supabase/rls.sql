@@ -139,6 +139,7 @@ DROP POLICY IF EXISTS "jobs_authenticated_insert"         ON jobs;
 DROP POLICY IF EXISTS "jobs_authenticated_update"         ON jobs;
 DROP POLICY IF EXISTS "jobs_authenticated_delete"         ON jobs;
 DROP POLICY IF EXISTS "jobs_anon_insert"                  ON jobs;
+DROP POLICY IF EXISTS "jobs_anon_insert_restricted"       ON jobs;
 
 -- interactions
 DROP POLICY IF EXISTS "Service role full access"          ON interactions;
@@ -546,11 +547,23 @@ CREATE POLICY "jobs_authenticated_delete"
     USING (true);
 
 -- Anon access: booking widget can create new jobs without authentication.
--- The widget collects customer info + service request and inserts a job row.
-CREATE POLICY "jobs_anon_insert"
+-- RESTRICTED: only allows setting booking-relevant fields; forces safe defaults.
+CREATE POLICY "jobs_anon_insert_restricted"
     ON jobs FOR INSERT
     TO anon
-    WITH CHECK (true);
+    WITH CHECK (
+        phone_number IS NOT NULL
+        AND phone_e164 IS NOT NULL
+        AND status = 'new'
+        AND assigned_technician_id IS NULL
+        AND scheduled_at IS NULL
+        AND is_spam = FALSE
+        AND priority = 'normal'
+        AND closed_at IS NULL
+        AND source_event_id IS NULL
+        AND estimate_id IS NULL
+        AND recurring_job_id IS NULL
+    );
 
 
 -- ============================================================================
@@ -1263,24 +1276,84 @@ CREATE POLICY "installed_plugins_authenticated_delete"
 
 
 -- ============================================================================
+-- SECTION 32: INVOICES  (billing table)
+-- ============================================================================
+
+ALTER TABLE invoices ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "invoices_authenticated_select" ON invoices;
+DROP POLICY IF EXISTS "invoices_authenticated_insert" ON invoices;
+DROP POLICY IF EXISTS "invoices_authenticated_update" ON invoices;
+DROP POLICY IF EXISTS "invoices_authenticated_delete" ON invoices;
+
+CREATE POLICY "invoices_authenticated_select"
+    ON invoices FOR SELECT TO authenticated USING (true);
+CREATE POLICY "invoices_authenticated_insert"
+    ON invoices FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "invoices_authenticated_update"
+    ON invoices FOR UPDATE TO authenticated USING (true);
+CREATE POLICY "invoices_authenticated_delete"
+    ON invoices FOR DELETE TO authenticated USING (true);
+
+
+-- ============================================================================
+-- SECTION 33: INVOICE_ITEMS  (billing line items)
+-- ============================================================================
+
+ALTER TABLE invoice_items ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "invoice_items_authenticated_select" ON invoice_items;
+DROP POLICY IF EXISTS "invoice_items_authenticated_insert" ON invoice_items;
+DROP POLICY IF EXISTS "invoice_items_authenticated_update" ON invoice_items;
+DROP POLICY IF EXISTS "invoice_items_authenticated_delete" ON invoice_items;
+
+CREATE POLICY "invoice_items_authenticated_select"
+    ON invoice_items FOR SELECT TO authenticated USING (true);
+CREATE POLICY "invoice_items_authenticated_insert"
+    ON invoice_items FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "invoice_items_authenticated_update"
+    ON invoice_items FOR UPDATE TO authenticated USING (true);
+CREATE POLICY "invoice_items_authenticated_delete"
+    ON invoice_items FOR DELETE TO authenticated USING (true);
+
+
+-- ============================================================================
+-- SECTION 34: PAYMENTS  (payment records)
+-- ============================================================================
+
+ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "payments_authenticated_select" ON payments;
+DROP POLICY IF EXISTS "payments_authenticated_insert" ON payments;
+DROP POLICY IF EXISTS "payments_authenticated_update" ON payments;
+DROP POLICY IF EXISTS "payments_authenticated_delete" ON payments;
+
+CREATE POLICY "payments_authenticated_select"
+    ON payments FOR SELECT TO authenticated USING (true);
+CREATE POLICY "payments_authenticated_insert"
+    ON payments FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "payments_authenticated_update"
+    ON payments FOR UPDATE TO authenticated USING (true);
+CREATE POLICY "payments_authenticated_delete"
+    ON payments FOR DELETE TO authenticated USING (true);
+
+
+-- ============================================================================
 -- NOTES
 -- ============================================================================
--- 1. All 30 existing public tables have RLS ENABLED and authenticated CRUD
---    policies. This is an internal business application where every logged-in
---    user should see all data within the Supabase project.
+-- 1. All 33 public tables have RLS ENABLED and authenticated CRUD policies.
+--    This is an internal business application where every logged-in user
+--    should see all data within the Supabase project.
 --
--- 2. service_role (used by Edge Functions) bypasses RLS entirely. No explicit
---    service_role policies are needed -- Supabase automatically grants full
---    access to service_role regardless of RLS settings.
+-- 2. service_role (used by Edge Functions) bypasses RLS entirely.
 --
 -- 3. Special anon access:
 --      - business_settings : anon SELECT (booking widget reads biz info)
---      - jobs              : anon INSERT (booking widget creates jobs)
+--      - jobs              : anon INSERT (booking widget creates jobs, RESTRICTED)
 --      - customer_portal_tokens : anon SELECT (portal auth, future table)
 --
 -- 4. Tables that had RLS DISABLED in production (action_queue, call_logs,
---    message_logs) are explicitly enabled here. Applying this file will
---    protect those tables with RLS.
+--    message_logs) are explicitly enabled here.
 --
 -- 5. The old owner_id = auth.uid() pattern has been replaced with
 --    TO authenticated USING (true). In a single-tenant internal app this

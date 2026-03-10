@@ -262,12 +262,14 @@ export default function CompanySettingsPage() {
                     type="color"
                     value={settings.primary_color}
                     onChange={e => updateField('primary_color', e.target.value)}
+                    aria-label="Primary color picker"
                     className="w-10 h-10 rounded border border-slate-300 cursor-pointer"
                   />
                   <input
                     type="text"
                     value={settings.primary_color}
                     onChange={e => updateField('primary_color', e.target.value)}
+                    aria-label="Primary color hex value"
                     className={inputClass}
                   />
                 </div>
@@ -279,12 +281,14 @@ export default function CompanySettingsPage() {
                     type="color"
                     value={settings.secondary_color}
                     onChange={e => updateField('secondary_color', e.target.value)}
+                    aria-label="Secondary color picker"
                     className="w-10 h-10 rounded border border-slate-300 cursor-pointer"
                   />
                   <input
                     type="text"
                     value={settings.secondary_color}
                     onChange={e => updateField('secondary_color', e.target.value)}
+                    aria-label="Secondary color hex value"
                     className={inputClass}
                   />
                 </div>
@@ -318,6 +322,7 @@ export default function CompanySettingsPage() {
                       type="time"
                       value={hour.start}
                       onChange={e => updateHour(i, 'start', e.target.value)}
+                      aria-label={`${DAYS[i]} start time`}
                       className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm"
                     />
                     <span className="text-slate-400">to</span>
@@ -325,6 +330,7 @@ export default function CompanySettingsPage() {
                       type="time"
                       value={hour.end}
                       onChange={e => updateHour(i, 'end', e.target.value)}
+                      aria-label={`${DAYS[i]} end time`}
                       className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm"
                     />
                   </>

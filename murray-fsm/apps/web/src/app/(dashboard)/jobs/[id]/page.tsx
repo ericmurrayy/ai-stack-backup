@@ -10,7 +10,6 @@ import { Button } from '@/components/ui/Button';
 import {
   cn,
   formatCents,
-  formatDate,
   formatDateTime,
   formatRelativeTime,
   jobStatusConfig,
@@ -18,21 +17,17 @@ import {
 } from '@/lib/utils';
 import {
   ArrowLeft,
-  Briefcase,
   User,
   Phone,
   Mail,
   MapPin,
   Clock,
   Calendar,
-  AlertTriangle,
   CheckCircle,
   FileText,
   MessageSquare,
   Wrench,
-  DollarSign,
   Edit,
-  ExternalLink,
   Star,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -43,19 +38,20 @@ import { notFound } from 'next/navigation';
 interface JobDetail {
   id: string;
   job_number: string;
-  title: string;
-  description: string | null;
+  customer_name: string | null;
+  phone_number: string | null;
+  email: string | null;
+  address: string | null;
+  city: string | null;
+  zip_code: string | null;
+  issue_description: string | null;
   status: string;
   service_category: string;
   urgency: string;
   assigned_technician_id: string | null;
   scheduled_at: string | null;
-  scheduled_start: string | null;
-  scheduled_end: string | null;
   created_at: string;
   updated_at: string;
-  customer: { id: string; name: string; phone: string | null; email: string | null } | null;
-  location: { address_line1: string | null; city: string | null; state: string | null; zip_code: string | null } | null;
   technician: { id: string; name: string; phone: string | null; color: string } | null;
 }
 
@@ -82,11 +78,11 @@ async function getJobDetail(jobId: string) {
   const { data: job, error } = await supabase
     .from('jobs')
     .select(`
-      id, job_number, title, description, status, service_category, urgency,
-      assigned_technician_id, scheduled_at, scheduled_start, scheduled_end,
+      id, job_number, customer_name, phone_number, email,
+      address, city, zip_code, issue_description,
+      status, service_category, urgency,
+      assigned_technician_id, scheduled_at,
       created_at, updated_at,
-      customer:customers(id, name, phone, email),
-      location:locations(address_line1, city, state, zip_code),
       technician:technicians!jobs_assigned_technician_id_fkey(id, name, phone, color)
     `)
     .eq('id', jobId)
@@ -108,24 +104,21 @@ async function getJobDetail(jobId: string) {
     .eq('job_id', jobId)
     .eq('deleted', false);
 
-  // Get message logs for the customer
-  const customerId = (job.customer as any)?.id;
+  // Get message logs for this job's phone number
   let messages: any[] = [];
-  if (customerId) {
+  if (job.phone_number) {
     const { data: msgData } = await supabase
       .from('message_logs')
       .select('id, direction, body, channel, created_at')
-      .eq('customer_id', customerId)
+      .eq('phone', job.phone_number)
       .order('created_at', { ascending: false })
       .limit(10);
     messages = msgData || [];
   }
 
-  // Normalize FK joins (Supabase may return arrays)
+  // Normalize technician FK join (Supabase may return array)
   const normalized: JobDetail = {
     ...(job as any),
-    customer: Array.isArray(job.customer) ? job.customer[0] ?? null : job.customer ?? null,
-    location: Array.isArray(job.location) ? job.location[0] ?? null : job.location ?? null,
     technician: Array.isArray(job.technician) ? job.technician[0] ?? null : job.technician ?? null,
   };
 
@@ -169,7 +162,9 @@ export default async function JobDetailPage({
             </Link>
             <div>
               <div className="flex items-center gap-3">
-                <h1 className="text-xl font-bold text-slate-900">{job.title}</h1>
+                <h1 className="text-xl font-bold text-slate-900">
+                  {job.customer_name || 'Unknown Customer'}
+                </h1>
                 <Badge className={statusInfo.color}>{statusInfo.label}</Badge>
                 <Badge className={categoryInfo.color}>{categoryInfo.label}</Badge>
                 <Badge className={`${urgency.bgColor} ${urgency.color}`}>{urgency.label}</Badge>
@@ -233,11 +228,11 @@ export default async function JobDetailPage({
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Description */}
-            {job.description && (
+            {/* Issue Description */}
+            {job.issue_description && (
               <Card padding="none" className="p-5">
-                <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-2">Description</h3>
-                <p className="text-slate-900 whitespace-pre-wrap">{job.description}</p>
+                <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-2">Issue Description</h3>
+                <p className="text-slate-900 whitespace-pre-wrap">{job.issue_description}</p>
               </Card>
             )}
 
@@ -245,24 +240,10 @@ export default async function JobDetailPage({
             <Card padding="none" className="p-5">
               <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">Schedule</h3>
               <div className="space-y-3">
-                {job.scheduled_start ? (
+                {job.scheduled_at ? (
                   <div className="flex items-center gap-3">
                     <Calendar className="w-5 h-5 text-blue-500" />
-                    <div>
-                      <div className="font-medium text-slate-900">
-                        {formatDateTime(job.scheduled_start)}
-                      </div>
-                      {job.scheduled_end && (
-                        <div className="text-sm text-slate-500">
-                          to {formatDateTime(job.scheduled_end)}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ) : job.scheduled_at ? (
-                  <div className="flex items-center gap-3">
-                    <Calendar className="w-5 h-5 text-blue-500" />
-                    <span className="text-slate-900">{formatDateTime(job.scheduled_at)}</span>
+                    <span className="font-medium text-slate-900">{formatDateTime(job.scheduled_at)}</span>
                   </div>
                 ) : (
                   <div className="flex items-center gap-3 text-slate-400">
@@ -357,47 +338,44 @@ export default async function JobDetailPage({
             {/* Customer Info */}
             <Card padding="none" className="p-5">
               <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">Customer</h3>
-              {job.customer ? (
+              {job.customer_name ? (
                 <div className="space-y-3">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
                       <User className="w-5 h-5 text-blue-600" />
                     </div>
                     <div>
-                      <div className="font-medium text-slate-900">{job.customer.name}</div>
-                      <Link href={`/customers#${job.customer.id}`} className="text-xs text-blue-600 hover:underline">
-                        View profile →
-                      </Link>
+                      <div className="font-medium text-slate-900">{job.customer_name}</div>
                     </div>
                   </div>
-                  {job.customer.phone && (
-                    <a href={`tel:${job.customer.phone}`} className="flex items-center gap-2 text-sm text-slate-600 hover:text-blue-600">
+                  {job.phone_number && (
+                    <a href={`tel:${job.phone_number}`} className="flex items-center gap-2 text-sm text-slate-600 hover:text-blue-600">
                       <Phone className="w-4 h-4 text-slate-400" />
-                      {job.customer.phone}
+                      {job.phone_number}
                     </a>
                   )}
-                  {job.customer.email && (
-                    <a href={`mailto:${job.customer.email}`} className="flex items-center gap-2 text-sm text-slate-600 hover:text-blue-600">
+                  {job.email && (
+                    <a href={`mailto:${job.email}`} className="flex items-center gap-2 text-sm text-slate-600 hover:text-blue-600">
                       <Mail className="w-4 h-4 text-slate-400" />
-                      {job.customer.email}
+                      {job.email}
                     </a>
                   )}
                 </div>
               ) : (
-                <p className="text-sm text-slate-400">No customer assigned</p>
+                <p className="text-sm text-slate-400">No customer info</p>
               )}
             </Card>
 
             {/* Location */}
             <Card padding="none" className="p-5">
               <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-3">Location</h3>
-              {job.location ? (
+              {job.address || job.city ? (
                 <div className="flex items-start gap-2">
                   <MapPin className="w-4 h-4 text-slate-400 mt-0.5" />
                   <div className="text-sm text-slate-700">
-                    {job.location.address_line1 && <div>{job.location.address_line1}</div>}
+                    {job.address && <div>{job.address}</div>}
                     <div>
-                      {[job.location.city, job.location.state, job.location.zip_code]
+                      {[job.city, job.zip_code]
                         .filter(Boolean)
                         .join(', ')}
                     </div>

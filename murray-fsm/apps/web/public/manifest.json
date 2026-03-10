@@ -1,0 +1,16 @@
+{
+  "name": "Murray's FSM",
+  "short_name": "FSM",
+  "description": "Field Service Management System",
+  "start_url": "/jobs",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0F172A",
+  "icons": [
+    {
+      "src": "/icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

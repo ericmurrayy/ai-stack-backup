@@ -62,7 +62,9 @@ export async function middleware(request: NextRequest) {
   // Protect dashboard routes (deny-by-default)
   // Route groups like (dashboard) are NOT part of the URL path,
   // so we protect everything except known public paths.
-  const publicPrefixes = ['/auth', '/book', '/portal', '/api'];
+  // Only /api/v1 is public (uses API key auth).
+  // Other /api routes (api-keys, approvals, pdf, etc.) require session auth.
+  const publicPrefixes = ['/auth', '/book', '/portal', '/api/v1'];
   const isPublic = publicPrefixes.some(p => request.nextUrl.pathname.startsWith(p))
     || request.nextUrl.pathname === '/';
 
