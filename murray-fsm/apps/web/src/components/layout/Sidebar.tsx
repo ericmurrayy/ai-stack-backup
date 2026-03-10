@@ -28,6 +28,9 @@ import {
   FileCheck,
   LayoutGrid,
   Gift,
+  TrendingUp,
+  Trophy,
+  Receipt,
 } from 'lucide-react';
 
 const mainNavigation = [
@@ -46,6 +49,8 @@ const communicationNavigation = [
 
 const businessNavigation = [
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
+  { name: 'Reports', href: '/reports', icon: TrendingUp },
+  { name: 'Invoices', href: '/invoices', icon: Receipt },
   { name: 'Payments', href: '/payments', icon: CreditCard },
   { name: 'Estimates', href: '/estimates', icon: FileText },
   { name: 'Reviews', href: '/reviews', icon: Star },
@@ -55,6 +60,7 @@ const businessNavigation = [
 
 const operationsNavigation = [
   { name: 'Team', href: '/team', icon: UserCog },
+  { name: 'Performance', href: '/performance', icon: Trophy },
   { name: 'Inventory', href: '/inventory', icon: Package },
   { name: 'Recurring', href: '/recurring', icon: Repeat },
   { name: 'Agreements', href: '/agreements', icon: FileCheck },
