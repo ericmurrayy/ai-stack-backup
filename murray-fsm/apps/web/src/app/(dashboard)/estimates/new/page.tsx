@@ -5,7 +5,9 @@
 
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
+import { CustomerPicker } from '@/components/shared/CustomerPicker';
+import { ServicePicker, type ServiceItem } from '@/components/shared/ServicePicker';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Card } from '@/components/ui/Card';
@@ -99,59 +101,90 @@ function LineItemEditor({
   item,
   onChange,
   onRemove,
+  onSelectService,
 }: {
   item: LineItem;
   onChange: (item: LineItem) => void;
   onRemove: () => void;
+  onSelectService: (svc: ServiceItem) => void;
 }) {
+  const [showServicePicker, setShowServicePicker] = useState(false);
+
   return (
-    <div className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg">
-      <div className="flex-1 space-y-2">
-        <input
-          type="text"
-          value={item.name}
-          onChange={(e) => onChange({ ...item, name: e.target.value })}
-          placeholder="Item name (e.g. Water Heater, Labor)"
-          className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+    <div className="p-3 bg-slate-50 rounded-lg space-y-2">
+      {/* Service picker toggle */}
+      {!item.name && !showServicePicker && (
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setShowServicePicker(true)}
+            className="text-xs text-blue-600 hover:text-blue-800 font-medium flex items-center gap-1"
+          >
+            <Plus className="w-3 h-3" />
+            Pick from services/inventory
+          </button>
+          <span className="text-xs text-slate-400">or type below</span>
+        </div>
+      )}
+
+      {showServicePicker && (
+        <ServicePicker
+          onSelect={(svc) => {
+            onSelectService(svc);
+            setShowServicePicker(false);
+          }}
+          placeholder="Search your services, parts, or materials..."
         />
-        <input
-          type="text"
-          value={item.description}
-          onChange={(e) => onChange({ ...item, description: e.target.value })}
-          placeholder="Description (optional)"
-          className="w-full px-3 py-1.5 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-500"
-        />
-      </div>
-      <div className="flex items-center gap-2">
-        <input
-          type="number"
-          value={item.qty}
-          onChange={(e) => onChange({ ...item, qty: Math.max(1, parseInt(e.target.value) || 1) })}
-          min={1}
-          aria-label="Quantity"
-          className="w-16 px-2 py-1.5 text-sm text-center border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-        <span className="text-xs text-slate-400">×</span>
-        <div className="relative">
-          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-sm text-slate-400">$</span>
+      )}
+
+      <div className="flex items-start gap-3">
+        <div className="flex-1 space-y-2">
           <input
             type="text"
-            value={formatCentsInput(item.unit_price_cents)}
-            onChange={(e) => onChange({ ...item, unit_price_cents: parseDollarsToCents(e.target.value) })}
-            aria-label="Unit price"
-            className="w-24 pl-6 pr-2 py-1.5 text-sm text-right border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            value={item.name}
+            onChange={(e) => onChange({ ...item, name: e.target.value })}
+            placeholder="Item name (e.g. Water Heater, Labor)"
+            className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <input
+            type="text"
+            value={item.description}
+            onChange={(e) => onChange({ ...item, description: e.target.value })}
+            placeholder="Description (optional)"
+            className="w-full px-3 py-1.5 text-sm border border-slate-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-500"
           />
         </div>
-        <span className="text-sm font-medium text-slate-700 w-20 text-right">
-          {formatCents(item.qty * item.unit_price_cents)}
-        </span>
-        <button
-          onClick={onRemove}
-          title="Remove line item"
-          className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
-        >
-          <Trash2 className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            value={item.qty}
+            onChange={(e) => onChange({ ...item, qty: Math.max(1, parseInt(e.target.value) || 1) })}
+            min={1}
+            aria-label="Quantity"
+            className="w-16 px-2 py-1.5 text-sm text-center border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+          <span className="text-xs text-slate-400">×</span>
+          <div className="relative">
+            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-sm text-slate-400">$</span>
+            <input
+              type="text"
+              value={formatCentsInput(item.unit_price_cents)}
+              onChange={(e) => onChange({ ...item, unit_price_cents: parseDollarsToCents(e.target.value) })}
+              aria-label="Unit price"
+              className="w-24 pl-6 pr-2 py-1.5 text-sm text-right border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <span className="text-sm font-medium text-slate-700 w-20 text-right">
+            {formatCents(item.qty * item.unit_price_cents)}
+          </span>
+          <button
+            onClick={onRemove}
+            title="Remove line item"
+            className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -242,6 +275,14 @@ function GBBTierCard({
             item={item}
             onChange={(updated) => updateLineItem(index, updated)}
             onRemove={() => removeLineItem(index)}
+            onSelectService={(svc) => {
+              updateLineItem(index, {
+                ...item,
+                name: svc.name,
+                description: svc.description || '',
+                unit_price_cents: svc.price_cents,
+              });
+            }}
           />
         ))}
 
@@ -269,8 +310,7 @@ export default function NewEstimatePage() {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [estimateTitle, setEstimateTitle] = useState('');
-  const [customerSearch, setCustomerSearch] = useState('');
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<{ id: string; name: string; phone: string | null; email: string | null; address: string | null } | null>(null);
   const [notes, setNotes] = useState('');
   const [validDays, setValidDays] = useState(30);
   const [useGBB, setUseGBB] = useState(true);
@@ -340,7 +380,7 @@ export default function NewEstimatePage() {
             .from('estimates')
             .insert({
               title: `${estimateTitle} — ${tier.label}`,
-              customer_id: selectedCustomerId,
+              customer_id: selectedCustomer?.id || null,
               status: sendImmediately ? 'sent' : 'draft',
               total_cents: total,
               notes: `${tier.tagline}\n\n${notes}${tier.recommended ? '\n\n★ RECOMMENDED OPTION' : ''}`,
@@ -385,7 +425,7 @@ export default function NewEstimatePage() {
           .from('estimates')
           .insert({
             title: estimateTitle,
-            customer_id: selectedCustomerId,
+            customer_id: selectedCustomer?.id || null,
             status: sendImmediately ? 'sent' : 'draft',
             total_cents: total,
             notes: notes || null,
@@ -488,12 +528,9 @@ export default function NewEstimatePage() {
             <label className="block text-sm font-medium text-slate-700 mb-1">
               Customer
             </label>
-            <input
-              type="text"
-              value={customerSearch}
-              onChange={(e) => setCustomerSearch(e.target.value)}
-              placeholder="Search customer by name or phone..."
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            <CustomerPicker
+              selectedCustomer={selectedCustomer}
+              onSelect={setSelectedCustomer}
             />
           </div>
           <div>
@@ -578,6 +615,16 @@ export default function NewEstimatePage() {
                 onRemove={() =>
                   setSingleLineItems(singleLineItems.filter((_, i) => i !== index))
                 }
+                onSelectService={(svc) => {
+                  const items = [...singleLineItems];
+                  items[index] = {
+                    ...item,
+                    name: svc.name,
+                    description: svc.description || '',
+                    unit_price_cents: svc.price_cents,
+                  };
+                  setSingleLineItems(items);
+                }}
               />
             ))}
             <button

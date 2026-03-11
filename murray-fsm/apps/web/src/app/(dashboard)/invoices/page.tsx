@@ -224,7 +224,7 @@ export default async function InvoicesPage({
         <Card padding="none">
           <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-slate-900">All Invoices</h2>
-            <Link href="/estimates/new">
+            <Link href="/invoices/new">
               <Button size="sm">
                 <Plus className="w-4 h-4" />
                 Create Invoice
@@ -257,7 +257,7 @@ export default async function InvoicesPage({
                   </Button>
                 </Link>
               ) : (
-                <Link href="/estimates/new">
+                <Link href="/invoices/new">
                   <Button size="sm">
                     <Plus className="w-4 h-4" />
                     Create Invoice
