@@ -9,6 +9,7 @@ import { createClient } from '@/lib/supabase/client';
 import { Header } from '@/components/layout/Header';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { CustomerPicker } from '@/components/shared/CustomerPicker';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 
@@ -62,6 +63,26 @@ export default function NewJobPage() {
   const [form, setForm] = useState<FormData>(initialForm);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<{
+    id: string;
+    name: string;
+    phone: string | null;
+    email: string | null;
+    address: string | null;
+  } | null>(null);
+
+  const handleCustomerSelect = (customer: typeof selectedCustomer) => {
+    setSelectedCustomer(customer);
+    if (customer) {
+      setForm((prev) => ({
+        ...prev,
+        customer_name: customer.name,
+        phone_number: customer.phone || prev.phone_number,
+        email: customer.email || prev.email,
+        address: customer.address || prev.address,
+      }));
+    }
+  };
 
   function handleChange(
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
@@ -156,19 +177,13 @@ export default function NewJobPage() {
               Customer Information
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="customer_name" className={labelClass}>
-                  Customer Name <span className="text-red-500">*</span>
+              <div className="sm:col-span-2">
+                <label className={labelClass}>
+                  Customer <span className="text-red-500">*</span>
                 </label>
-                <input
-                  id="customer_name"
-                  name="customer_name"
-                  type="text"
-                  value={form.customer_name}
-                  onChange={handleChange}
-                  placeholder="John Smith"
-                  className={inputClass}
-                  required
+                <CustomerPicker
+                  selectedCustomer={selectedCustomer}
+                  onSelect={handleCustomerSelect}
                 />
               </div>
               <div>
