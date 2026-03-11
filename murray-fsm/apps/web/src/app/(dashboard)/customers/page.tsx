@@ -9,6 +9,7 @@ import { formatPhone } from '@/lib/utils';
 import { Users, Phone, Mail, MapPin, Plus, ChevronLeft, ChevronRight, Inbox } from 'lucide-react';
 import Link from 'next/link';
 import { CustomersFilters } from './CustomersFilters';
+import { AddCustomerButton } from './AddCustomerButton';
 import type { Customer, Location } from '@/types/database';
 
 // ---------------------------------------------------------------------------
@@ -149,10 +150,12 @@ export default async function CustomersPage({
                 Manage your customer database
               </p>
             </div>
-            <Button size="sm">
-              <Plus className="w-4 h-4" />
-              Add Customer
-            </Button>
+            <AddCustomerButton>
+              <Button size="sm">
+                <Plus className="w-4 h-4" />
+                Add Customer
+              </Button>
+            </AddCustomerButton>
           </div>
 
           {/* Search & Filter Bar */}
@@ -180,10 +183,12 @@ export default async function CustomersPage({
                   </Button>
                 </Link>
               ) : (
-                <Button size="sm">
-                  <Plus className="w-4 h-4" />
-                  Add Customer
-                </Button>
+                <AddCustomerButton>
+                  <Button size="sm">
+                    <Plus className="w-4 h-4" />
+                    Add Customer
+                  </Button>
+                </AddCustomerButton>
               )}
             </div>
           ) : (
