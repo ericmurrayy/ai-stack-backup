@@ -117,7 +117,7 @@ function SectionHeading({
 // ---------------------------------------------------------------------------
 
 async function getAnalyticsData() {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   // Date boundaries -------------------------------------------------------
   const now = new Date();

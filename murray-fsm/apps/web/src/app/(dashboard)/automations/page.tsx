@@ -159,7 +159,7 @@ const categoryColors: Record<string, string> = {
 // ---------- Data Fetcher ----------
 
 async function getAutomationStats() {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   // Check action_queue for recent automation activity
   const { data: recentActions, count } = await supabase

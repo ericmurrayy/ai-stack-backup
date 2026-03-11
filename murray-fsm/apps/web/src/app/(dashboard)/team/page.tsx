@@ -40,7 +40,7 @@ interface TeamMember {
 }
 
 async function getTeamData(): Promise<TeamMember[]> {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { data: members } = await supabase
     .from('technicians')

@@ -14,7 +14,7 @@ interface CalendarEventWithJob extends CalendarEvent {
 }
 
 async function getCalendarEvents(): Promise<CalendarEventWithJob[]> {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { data, error } = await supabase
     .from('calendar_events')

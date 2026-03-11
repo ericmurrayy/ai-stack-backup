@@ -108,7 +108,7 @@ interface AgreementsData {
 }
 
 async function getAgreementsData(): Promise<AgreementsData> {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { data, error } = await supabase
     .from('service_agreements')

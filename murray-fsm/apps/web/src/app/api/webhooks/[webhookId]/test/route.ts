@@ -12,10 +12,10 @@ import {
 // POST /api/webhooks/[webhookId]/test - Send test event
 export async function POST(
   request: NextRequest,
-  { params }: { params: { webhookId: string } }
+  { params }: { params: Promise<{ webhookId: string }> }
 ) {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
@@ -26,7 +26,7 @@ export async function POST(
     const { data: webhook, error } = await supabase
       .from('webhook_endpoints')
       .select('*')
-      .eq('id', params.webhookId)
+      .eq('id', (await params).webhookId)
       .eq('deleted', false)
       .single();
 
@@ -57,7 +57,7 @@ export async function POST(
 
     // Record delivery
     await supabase.from('webhook_deliveries').insert({
-      webhook_id: params.webhookId,
+      webhook_id: (await params).webhookId,
       event: testEvent,
       payload: testData,
       response_status: result.statusCode,
@@ -74,7 +74,7 @@ export async function POST(
         last_triggered_at: new Date().toISOString(),
         failure_count: result.success ? 0 : webhook.failure_count + 1,
       })
-      .eq('id', params.webhookId);
+      .eq('id', (await params).webhookId);
 
     return NextResponse.json({
       success: result.success,

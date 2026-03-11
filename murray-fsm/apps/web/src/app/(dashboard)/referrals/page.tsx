@@ -50,7 +50,7 @@ const statusConfig: Record<string, { color: string; label: string; icon: typeof 
 // ---------- Data Fetcher ----------
 
 async function getReferralData() {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { data } = await supabase
     .from('referrals')

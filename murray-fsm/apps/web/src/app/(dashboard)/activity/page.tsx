@@ -43,7 +43,7 @@ interface ActivityEvent {
 // ---------- Data Fetcher ----------
 
 async function getActivityData() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const events: ActivityEvent[] = [];
 
   // Recent jobs

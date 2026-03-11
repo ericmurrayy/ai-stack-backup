@@ -3,14 +3,14 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { authenticateApiRequest } from '@/lib/api-auth';
+import { authenticateAndRateLimit } from '@/lib/api-middleware';
+import { applyRateLimitHeaders } from '@/lib/rate-limiter';
 import { hasScope } from '@murray-fsm/services';
 import { z } from 'zod';
-import { validateBody, validateUUID, isoDateString, uuidString } from '@/lib/api-validation';
+import { validateBody, validateUUID, isoDateString, uuidString, JOB_STATUSES } from '@/lib/api-validation';
+import { dispatchWebhookEvent } from '@/lib/webhook-dispatch';
 
 // --- Zod Schemas ---
-
-const JOB_STATUSES = ['new', 'contacted', 'scheduled', 'in_progress', 'completed', 'cancelled', 'spam'] as const;
 
 const updateJobBodySchema = z.object({
   title: z.string().min(1).max(500).optional(),
@@ -30,30 +30,28 @@ const updateJobBodySchema = z.object({
 // GET /api/v1/jobs/:jobId - Get job details
 export async function GET(
   request: NextRequest,
-  { params }: { params: { jobId: string } }
+  { params }: { params: Promise<{ jobId: string }> }
 ) {
-  const auth = await authenticateApiRequest(request);
+  const { authenticated, auth, rateLimit, error: authError } = await authenticateAndRateLimit(request);
 
-  if (!auth.authenticated) {
-    return NextResponse.json(
-      { error: auth.error, code: 'UNAUTHORIZED' },
-      { status: auth.statusCode || 401 }
-    );
-  }
+  if (!authenticated || !rateLimit.allowed) return authError!;
 
   if (!hasScope(auth.scopes!, 'read:jobs')) {
-    return NextResponse.json(
-      { error: 'Insufficient permissions', code: 'FORBIDDEN' },
-      { status: 403 }
+    return applyRateLimitHeaders(
+      NextResponse.json(
+        { error: 'Insufficient permissions', code: 'FORBIDDEN' },
+        { status: 403 }
+      ),
+      rateLimit
     );
   }
 
   // Validate jobId is a UUID
-  const jobIdResult = validateUUID(params.jobId, 'jobId');
+  const jobIdResult = validateUUID((await params).jobId, 'jobId');
   if (!jobIdResult.success) return jobIdResult.response;
 
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
 
     const { data: job, error } = await supabase
       .from('jobs')
@@ -65,22 +63,28 @@ export async function GET(
         line_items:line_items(*),
         photos:job_photos(id, url, caption, taken_at)
       `)
-      .eq('id', params.jobId)
+      .eq('id', (await params).jobId)
       .eq('owner_id', auth.ownerId)
       .eq('deleted', false)
       .single();
 
     if (error || !job) {
-      return NextResponse.json(
-        { error: 'Job not found', code: 'NOT_FOUND' },
-        { status: 404 }
+      return applyRateLimitHeaders(
+        NextResponse.json(
+          { error: 'Job not found', code: 'NOT_FOUND' },
+          { status: 404 }
+        ),
+        rateLimit
       );
     }
 
-    return NextResponse.json({
-      success: true,
-      data: { job },
-    });
+    return applyRateLimitHeaders(
+      NextResponse.json({
+        success: true,
+        data: { job },
+      }),
+      rateLimit
+    );
   } catch (error) {
     console.error('Get job error:', error);
     return NextResponse.json(
@@ -93,30 +97,28 @@ export async function GET(
 // PATCH /api/v1/jobs/:jobId - Update job
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { jobId: string } }
+  { params }: { params: Promise<{ jobId: string }> }
 ) {
-  const auth = await authenticateApiRequest(request);
+  const { authenticated, auth, rateLimit, error: authError } = await authenticateAndRateLimit(request);
 
-  if (!auth.authenticated) {
-    return NextResponse.json(
-      { error: auth.error, code: 'UNAUTHORIZED' },
-      { status: auth.statusCode || 401 }
-    );
-  }
+  if (!authenticated || !rateLimit.allowed) return authError!;
 
   if (!hasScope(auth.scopes!, 'write:jobs')) {
-    return NextResponse.json(
-      { error: 'Insufficient permissions', code: 'FORBIDDEN' },
-      { status: 403 }
+    return applyRateLimitHeaders(
+      NextResponse.json(
+        { error: 'Insufficient permissions', code: 'FORBIDDEN' },
+        { status: 403 }
+      ),
+      rateLimit
     );
   }
 
   // Validate jobId is a UUID
-  const patchJobIdResult = validateUUID(params.jobId, 'jobId');
+  const patchJobIdResult = validateUUID((await params).jobId, 'jobId');
   if (!patchJobIdResult.success) return patchJobIdResult.response;
 
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
     const body = await request.json();
 
     // Validate update fields against allowed list with proper types
@@ -139,23 +141,39 @@ export async function PATCH(
     const { data: job, error } = await supabase
       .from('jobs')
       .update(updates)
-      .eq('id', params.jobId)
+      .eq('id', (await params).jobId)
       .eq('owner_id', auth.ownerId)
       .eq('deleted', false)
       .select()
       .single();
 
     if (error) {
-      return NextResponse.json(
-        { error: 'Job not found', code: 'NOT_FOUND' },
-        { status: 404 }
+      return applyRateLimitHeaders(
+        NextResponse.json(
+          { error: 'Job not found', code: 'NOT_FOUND' },
+          { status: 404 }
+        ),
+        rateLimit
       );
     }
 
-    return NextResponse.json({
-      success: true,
-      data: { job },
-    });
+    // Fire-and-forget: notify webhook subscribers
+    dispatchWebhookEvent(auth.ownerId!, 'job.updated', { job });
+
+    // Fire additional status-specific events
+    if (validated.status === 'completed') {
+      dispatchWebhookEvent(auth.ownerId!, 'job.completed', { job });
+    } else if (validated.status === 'cancelled') {
+      dispatchWebhookEvent(auth.ownerId!, 'job.cancelled', { job });
+    }
+
+    return applyRateLimitHeaders(
+      NextResponse.json({
+        success: true,
+        data: { job },
+      }),
+      rateLimit
+    );
   } catch (error) {
     console.error('Update job error:', error);
     return NextResponse.json(
@@ -168,43 +186,44 @@ export async function PATCH(
 // DELETE /api/v1/jobs/:jobId - Delete job (soft delete)
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { jobId: string } }
+  { params }: { params: Promise<{ jobId: string }> }
 ) {
-  const auth = await authenticateApiRequest(request);
+  const { authenticated, auth, rateLimit, error: authError } = await authenticateAndRateLimit(request);
 
-  if (!auth.authenticated) {
-    return NextResponse.json(
-      { error: auth.error, code: 'UNAUTHORIZED' },
-      { status: auth.statusCode || 401 }
-    );
-  }
+  if (!authenticated || !rateLimit.allowed) return authError!;
 
   if (!hasScope(auth.scopes!, 'write:jobs')) {
-    return NextResponse.json(
-      { error: 'Insufficient permissions', code: 'FORBIDDEN' },
-      { status: 403 }
+    return applyRateLimitHeaders(
+      NextResponse.json(
+        { error: 'Insufficient permissions', code: 'FORBIDDEN' },
+        { status: 403 }
+      ),
+      rateLimit
     );
   }
 
   // Validate jobId is a UUID
-  const deleteJobIdResult = validateUUID(params.jobId, 'jobId');
+  const deleteJobIdResult = validateUUID((await params).jobId, 'jobId');
   if (!deleteJobIdResult.success) return deleteJobIdResult.response;
 
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
 
     const { error } = await supabase
       .from('jobs')
       .update({ deleted: true, updated_at: new Date().toISOString() })
-      .eq('id', params.jobId)
+      .eq('id', (await params).jobId)
       .eq('owner_id', auth.ownerId);
 
     if (error) throw error;
 
-    return NextResponse.json({
-      success: true,
-      message: 'Job deleted',
-    });
+    return applyRateLimitHeaders(
+      NextResponse.json({
+        success: true,
+        message: 'Job deleted',
+      }),
+      rateLimit
+    );
   } catch (error) {
     console.error('Delete job error:', error);
     return NextResponse.json(

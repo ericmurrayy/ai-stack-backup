@@ -1,9 +1,11 @@
 // Murray's FSM - Estimate PDF API Route
 // ======================================
+// Returns PDF by default, HTML with ?format=html
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { generateEstimateHTML, type EstimateData, type BusinessInfo } from '@murray-fsm/services';
+import { renderEstimatePdf } from '@/lib/pdf-renderer';
 
 // Business info - would normally come from config/database
 const BUSINESS_INFO: BusinessInfo = {
@@ -20,12 +22,12 @@ const BUSINESS_INFO: BusinessInfo = {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { jobId: string } }
+  { params }: { params: Promise<{ jobId: string }> }
 ) {
-  const { jobId } = params;
+  const { jobId } = await params;
 
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
 
     // Auth check — require logged-in user
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -91,26 +93,30 @@ export async function GET(
       terms: 'Estimate valid for 30 days. Prices subject to change based on actual conditions found.',
     };
 
-    // Generate HTML
-    const html = generateEstimateHTML(BUSINESS_INFO, estimateData);
-
-    // Return HTML (can be converted to PDF by client or using a service)
-    // For actual PDF, you'd use something like Puppeteer or html-pdf-node
-    const format = request.nextUrl.searchParams.get('format') || 'html';
+    // Determine output format: pdf (default) or html
+    const format = request.nextUrl.searchParams.get('format') || 'pdf';
 
     if (format === 'html') {
+      // Return rendered HTML (existing behavior)
+      const html = generateEstimateHTML(BUSINESS_INFO, estimateData);
       return new NextResponse(html, {
         headers: {
-          'Content-Type': 'text/html',
+          'Content-Type': 'text/html; charset=utf-8',
         },
       });
     }
 
-    // For PDF, return instructions (actual PDF generation requires additional setup)
-    return NextResponse.json({
-      message: 'PDF generation requires server-side rendering service',
-      html,
-      downloadUrl: `/api/pdf/estimate/${jobId}?format=html`,
+    // Default: generate PDF
+    const pdfBytes = renderEstimatePdf(BUSINESS_INFO, estimateData);
+    const filename = `Estimate-${estimateData.estimateNumber}.pdf`;
+
+    return new NextResponse(Buffer.from(pdfBytes), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `inline; filename="${filename}"`,
+        'Cache-Control': 'private, no-cache, no-store, must-revalidate',
+      },
     });
 
   } catch (error) {

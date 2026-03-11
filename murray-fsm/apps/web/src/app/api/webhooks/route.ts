@@ -10,11 +10,12 @@ import {
   WEBHOOK_EVENT_CATEGORIES,
   type WebhookEvent,
 } from '@murray-fsm/services';
+import { logAction } from '@/lib/audit-log';
 
 // GET /api/webhooks - List all webhook endpoints
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
@@ -47,7 +48,7 @@ export async function GET(request: NextRequest) {
 // POST /api/webhooks - Create a new webhook endpoint
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
@@ -103,6 +104,16 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) throw error;
+
+    logAction(request, {
+      ownerId: user.id,
+      actorId: user.id,
+      actorEmail: user.email,
+      action: 'webhook.created',
+      resourceType: 'webhook_endpoint',
+      resourceId: data.id,
+      metadata: { url, events },
+    });
 
     return NextResponse.json({
       success: true,

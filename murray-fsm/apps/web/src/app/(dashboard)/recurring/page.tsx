@@ -115,7 +115,7 @@ async function getRecurringJobsData(): Promise<{
   jobs: RecurringJob[];
   stats: RecurringJobsStats;
 }> {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { data, error } = await supabase
     .from('recurring_jobs')

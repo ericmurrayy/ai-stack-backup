@@ -2,7 +2,7 @@
 // =======================================
 // Shared Zod-based validation utilities for API routes
 
-import { z, ZodError, ZodSchema } from 'zod';
+import { z, ZodError } from 'zod';
 import { NextResponse } from 'next/server';
 
 // ============================================================================
@@ -137,3 +137,61 @@ export const isoDateString = z.string().refine(
 
 /** UUID string */
 export const uuidString = z.string().uuid({ message: 'Must be a valid UUID' });
+
+/** Coerce a query-string value to a float number */
+export const floatString = z
+  .string()
+  .transform((v) => parseFloat(v))
+  .pipe(z.number().finite({ message: 'Must be a finite number' }));
+
+/** Optional string that trims whitespace and rejects empty strings */
+export const optionalTrimmedString = z.string().trim().min(1).optional();
+
+// ============================================================================
+// Shared Enum Values (matching packages/shared/src/constants.ts)
+// ============================================================================
+
+export const JOB_STATUSES = [
+  'new', 'contacted', 'scheduled', 'in_progress', 'completed', 'cancelled', 'spam',
+] as const;
+
+export const PAYMENT_STATUSES = [
+  'pending', 'processing', 'succeeded', 'failed', 'cancelled', 'refunded',
+] as const;
+
+export const ESTIMATE_STATUSES = [
+  'draft', 'sent', 'viewed', 'approved', 'rejected', 'expired',
+] as const;
+
+export const JOB_PRIORITIES = ['low', 'normal', 'high', 'emergency'] as const;
+
+export const ROUTE_OPTIMIZE_MODES = ['optimize', 'dispatch'] as const;
+
+export const SYNC_CHANGE_ACTIONS = ['create', 'update', 'delete'] as const;
+
+// ============================================================================
+// Reusable Zod Schemas for Common Query Patterns
+// ============================================================================
+
+/** Standard pagination query params: limit (1-100, default 50) and offset (>= 0, default 0) */
+export const paginationQuerySchema = z.object({
+  limit: positiveIntString(50).pipe(z.number().max(100, 'limit must be at most 100')),
+  offset: nonNegativeIntString(0),
+});
+
+/** Optional search string (trimmed, max 200 chars) */
+export const searchQuerySchema = z.object({
+  search: z.string().trim().max(200, 'search must be at most 200 characters').optional(),
+});
+
+/** Optional date range filter */
+export const dateRangeQuerySchema = z.object({
+  from_date: isoDateString.optional(),
+  to_date: isoDateString.optional(),
+});
+
+/** Latitude/longitude query params (both required, valid coordinate ranges) */
+export const latLngQuerySchema = z.object({
+  lat: floatString.pipe(z.number().min(-90).max(90, 'lat must be between -90 and 90')),
+  lng: floatString.pipe(z.number().min(-180).max(180, 'lng must be between -180 and 180')),
+});

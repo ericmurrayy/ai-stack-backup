@@ -47,7 +47,7 @@ interface TechPerformance {
 // ---------- Data Fetcher ----------
 
 async function getPerformanceData() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 

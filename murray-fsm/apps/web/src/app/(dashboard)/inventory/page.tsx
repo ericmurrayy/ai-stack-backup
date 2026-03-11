@@ -40,7 +40,7 @@ interface InventoryItem {
 }
 
 async function getInventoryData() {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { data: items } = await supabase
     .from('inventory_items')

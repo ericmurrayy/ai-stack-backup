@@ -421,6 +421,37 @@ export const AGREEMENT_STATUS_CONFIG: Record<import('./types').AgreementStatus, 
 } as const;
 
 // ============================================================================
+// Job Status Transition Rules
+// ============================================================================
+
+/** Valid next statuses for each current job status */
+export const JOB_STATUS_TRANSITIONS: Record<JobStatus, readonly JobStatus[]> = {
+  new: ['contacted', 'scheduled', 'cancelled', 'spam'],
+  contacted: ['scheduled', 'cancelled', 'spam'],
+  scheduled: ['in_progress', 'cancelled'],
+  in_progress: ['completed', 'scheduled'], // allow reschedule
+  completed: [], // terminal state
+  cancelled: ['new'], // allow re-opening
+  spam: ['new'], // allow recovery from false positive
+} as const;
+
+/** Check if a status transition is valid */
+export function isValidStatusTransition(from: JobStatus, to: JobStatus): boolean {
+  if (from === to) return true; // no-op is always valid
+  return JOB_STATUS_TRANSITIONS[from].includes(to);
+}
+
+/** Get human-readable invalid transition error */
+export function getTransitionError(from: JobStatus, to: JobStatus): string | null {
+  if (isValidStatusTransition(from, to)) return null;
+  const allowed = JOB_STATUS_TRANSITIONS[from];
+  if (allowed.length === 0) {
+    return `Cannot change status from "${from}" — it is a terminal state`;
+  }
+  return `Cannot change status from "${from}" to "${to}". Valid transitions: ${allowed.join(', ')}`;
+}
+
+// ============================================================================
 // Technician Skills (garage door services)
 // ============================================================================
 

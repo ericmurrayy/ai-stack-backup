@@ -34,7 +34,7 @@ interface Review {
 }
 
 async function getReviewsData() {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { data } = await supabase
     .from('reviews')

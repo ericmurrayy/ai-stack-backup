@@ -596,11 +596,11 @@ async function sendViaResend(config: EmailConfig, message: EmailMessage): Promis
   });
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ message: res.statusText }));
+    const err = await res.json().catch(() => ({ message: res.statusText })) as { message?: string };
     return { success: false, error: err.message || `Resend error: ${res.status}` };
   }
 
-  const data = await res.json();
+  const data = await res.json() as { id?: string };
   return { success: true, messageId: data.id };
 }
 
@@ -631,7 +631,7 @@ async function sendViaSendGrid(config: EmailConfig, message: EmailMessage): Prom
   });
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ errors: [{ message: res.statusText }] }));
+    const err = await res.json().catch(() => ({ errors: [{ message: res.statusText }] })) as { errors?: Array<{ message?: string }> };
     return { success: false, error: err.errors?.[0]?.message || `SendGrid error: ${res.status}` };
   }
 
@@ -665,10 +665,10 @@ async function sendViaPostmark(config: EmailConfig, message: EmailMessage): Prom
   });
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ Message: res.statusText }));
+    const err = await res.json().catch(() => ({ Message: res.statusText })) as { Message?: string };
     return { success: false, error: err.Message || `Postmark error: ${res.status}` };
   }
 
-  const data = await res.json();
+  const data = await res.json() as { MessageID?: string };
   return { success: true, messageId: data.MessageID };
 }

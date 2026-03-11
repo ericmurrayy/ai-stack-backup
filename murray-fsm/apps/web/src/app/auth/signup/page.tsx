@@ -29,8 +29,8 @@ export default function SignupPage() {
       return;
     }
 
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters');
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters');
       setLoading(false);
       return;
     }
@@ -74,7 +74,7 @@ export default function SignupPage() {
           {success ? (
             <div className="space-y-4">
               <div className="p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">
-                Account created! Check your email for a confirmation link to activate your account.
+                Check your email to confirm your account.
               </div>
               <Link
                 href="/auth/login"
@@ -140,9 +140,9 @@ export default function SignupPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-colors"
-                  placeholder="At least 6 characters"
+                  placeholder="At least 8 characters"
                   required
-                  minLength={6}
+                  minLength={8}
                 />
               </div>
 
@@ -161,7 +161,7 @@ export default function SignupPage() {
                   className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none transition-colors"
                   placeholder="Re-enter your password"
                   required
-                  minLength={6}
+                  minLength={8}
                 />
               </div>
 

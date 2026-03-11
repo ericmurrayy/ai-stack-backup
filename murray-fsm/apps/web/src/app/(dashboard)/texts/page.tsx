@@ -6,11 +6,11 @@ import { Header } from '@/components/layout/Header';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { formatPhone, formatRelativeTime } from '@/lib/utils';
-import { MessageSquare, ArrowDownLeft, ArrowUpRight, Image } from 'lucide-react';
+import { MessageSquare, ArrowDownLeft, ArrowUpRight, ImageIcon } from 'lucide-react';
 import type { MessageLog } from '@/types/database';
 
 async function getMessages(): Promise<MessageLog[]> {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { data, error } = await supabase
     .from('message_logs')
@@ -101,7 +101,7 @@ export default async function TextsPage() {
                           {threadMessages.length} messages
                         </Badge>
                         {hasMedia && (
-                          <Image className="w-4 h-4 text-slate-400" />
+                          <ImageIcon className="w-4 h-4 text-slate-400" />
                         )}
                       </div>
 

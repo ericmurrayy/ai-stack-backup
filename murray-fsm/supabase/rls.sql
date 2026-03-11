@@ -1381,7 +1381,7 @@ CREATE POLICY "payments_authenticated_delete"
 -- 4. Special anon access:
 --      - business_settings : anon SELECT (booking widget reads biz info)
 --      - jobs              : anon INSERT (booking widget creates jobs, RESTRICTED)
---      - customer_portal_tokens : anon SELECT (portal auth, future table)
+--      - customer_portal_tokens : anon SELECT (portal auth)
 --
 -- 5. Tables that had RLS DISABLED in production (action_queue, call_logs,
 --    message_logs) are explicitly enabled here.
@@ -1389,6 +1389,9 @@ CREATE POLICY "payments_authenticated_delete"
 -- 6. Storage bucket policies (job-photos, job-signatures) are NOT included
 --    here. Manage storage policies via the Supabase Dashboard.
 --
--- 7. When customer_portal_tokens is created, uncomment Section 31 above
---    and apply it.
+-- 7. customer_portal_tokens: table and RLS policies were created via
+--    migration 20260310090000_add_customer_portal_tokens.sql.
+--    The migration uses owner_id = auth.uid() scoping for authenticated
+--    users (stricter than the USING(true) draft in Section 31 above).
+--    Section 31 is kept commented-out for reference only.
 -- ============================================================================

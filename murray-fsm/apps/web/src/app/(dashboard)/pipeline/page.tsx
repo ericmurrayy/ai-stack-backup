@@ -48,7 +48,7 @@ interface StageWithLeads extends PipelineStage {
 }
 
 async function getPipelineData(): Promise<StageWithLeads[]> {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   // Get pipeline stages
   const { data: stages } = await supabase

@@ -11,11 +11,12 @@ import {
   API_KEY_PRESETS,
   type ApiKeyScope,
 } from '@murray-fsm/services';
+import { logAction } from '@/lib/audit-log';
 
 // GET /api/api-keys - List all API keys
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
@@ -49,7 +50,7 @@ export async function GET(request: NextRequest) {
 // POST /api/api-keys - Create a new API key
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
@@ -121,6 +122,17 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) throw error;
+
+    // Audit log: API key creation is security-sensitive
+    logAction(request, {
+      ownerId: user.id,
+      actorId: user.id,
+      actorEmail: user.email,
+      action: 'api_key.created',
+      resourceType: 'api_key',
+      resourceId: data.id,
+      metadata: { name, scopes, expires_at, key_prefix: keyPrefix },
+    });
 
     return NextResponse.json({
       success: true,

@@ -9,7 +9,7 @@ import { pluginRegistry, type InstalledPlugin } from '@murray-fsm/services';
 // GET /api/plugins - List all available plugins
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
 
     // Check authentication
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
 // POST /api/plugins - Install a plugin
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
 
     // Check authentication
     const { data: { user }, error: authError } = await supabase.auth.getUser();

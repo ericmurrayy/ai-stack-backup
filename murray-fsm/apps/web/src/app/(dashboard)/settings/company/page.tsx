@@ -15,7 +15,7 @@ import {
   MapPin,
   Clock,
   Globe,
-  Image,
+  ImageIcon,
   Save,
   CheckCircle,
 } from 'lucide-react';
@@ -240,7 +240,7 @@ export default function CompanySettingsPage() {
         {/* Branding */}
         <Card padding="none" className="p-6">
           <h3 className="font-semibold text-slate-900 mb-4 flex items-center gap-2">
-            <Image className="w-5 h-5 text-purple-600" aria-hidden="true" />
+            <ImageIcon className="w-5 h-5 text-purple-600" />
             Branding
           </h3>
           <div className="space-y-4">
@@ -351,8 +351,9 @@ export default function CompanySettingsPage() {
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Default Job Duration (minutes)</label>
+                <label htmlFor="settings-job-duration" className="block text-sm font-medium text-slate-700 mb-1">Default Job Duration (minutes)</label>
                 <input
+                  id="settings-job-duration"
                   type="number"
                   value={settings.default_job_duration_minutes}
                   onChange={e => updateField('default_job_duration_minutes', parseInt(e.target.value) || 120)}
@@ -360,8 +361,9 @@ export default function CompanySettingsPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Tax Rate (%)</label>
+                <label htmlFor="settings-tax-rate" className="block text-sm font-medium text-slate-700 mb-1">Tax Rate (%)</label>
                 <input
+                  id="settings-tax-rate"
                   type="number"
                   step="0.01"
                   value={settings.tax_rate}

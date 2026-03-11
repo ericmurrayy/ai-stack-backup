@@ -64,11 +64,15 @@ export interface Job {
   city: string | null;
   address: string | null;
   zip_code: string | null;
+  title: string | null;
+  service_type: string | null;
   service_category: ServiceCategory | null;
   urgency: Urgency | null;
   issue_description: string | null;
+  problem_description: string | null;
   preferred_time: string | null;
   scheduled_at: string | null;
+  scheduled_start: string | null;
   status: JobStatus;
   is_spam: boolean | null;
   spam_reason: string | null;
@@ -76,13 +80,57 @@ export interface Job {
   recommended_action: string | null;
   source_event_id: string | null;
   assigned_technician_id: string | null;
+  customer_id: string | null;
+  location_id: string | null;
   priority: Priority | null;
   source: string | null;
   recurring_job_id: string | null;
   estimate_id: string | null;
+  internal_notes: string | null;
+  arrived_at: string | null;
+  started_at: string | null;
+  completed_at: string | null;
   created_at: string;
   updated_at: string;
   closed_at: string | null;
+  deleted: boolean;
+}
+
+export interface LineItem {
+  id: string;
+  owner_id: string;
+  job_id: string;
+  kind: 'estimate' | 'invoice';
+  name?: string;
+  description: string;
+  qty: number;
+  quantity: number;
+  unit_price_cents: number;
+  total_cents: number;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+  deleted: boolean;
+}
+
+export interface Payment {
+  id: string;
+  owner_id: string;
+  job_id: string;
+  amount_cents: number;
+  status: string;
+  payment_method: string | null;
+  stripe_payment_intent_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface JobWithRelations extends Job {
+  customer?: Customer | null;
+  location?: Location | null;
+  line_items?: LineItem[];
+  photos?: JobPhoto[];
+  signatures?: JobSignature[];
 }
 
 export interface JobEvent {

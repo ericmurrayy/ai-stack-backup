@@ -124,9 +124,12 @@ export interface Payment {
   owner_id: string;
   job_id: string;
   provider: string;
+  payment_method: string | null;
   stripe_payment_intent_id: string | null;
   amount_cents: number;
   status: PaymentStatus;
+  customer_name: string | null;
+  payment_date: string | null;
   metadata: Record<string, unknown>;
   created_at: string;
   updated_at: string;

@@ -26,7 +26,7 @@ import {
 // ---------- Data Fetcher ----------
 
 async function getRevenueData() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const now = new Date();
   const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);

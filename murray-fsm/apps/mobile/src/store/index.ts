@@ -21,6 +21,8 @@ import type {
   Estimate,
   ActionQueueItem,
   CalendarEvent,
+  LineItem,
+  Payment,
 } from '../types';
 
 // Configure Legend-State for persistence
@@ -121,6 +123,22 @@ export const jobPhotos$ = observable<Record<string, JobPhoto>>(
 export const jobSignatures$ = observable<Record<string, JobSignature>>(
   synced({
     ...createSupabaseSync<JobSignature>('job_signatures'),
+    initial: {},
+  })
+);
+
+// Line Items store
+export const lineItems$ = observable<Record<string, LineItem>>(
+  synced({
+    ...createSupabaseSync<LineItem>('line_items'),
+    initial: {},
+  })
+);
+
+// Payments store
+export const payments$ = observable<Record<string, Payment>>(
+  synced({
+    ...createSupabaseSync<Payment>('payments', { fieldDeleted: false }),
     initial: {},
   })
 );

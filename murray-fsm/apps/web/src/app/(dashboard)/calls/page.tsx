@@ -11,7 +11,7 @@ import Link from 'next/link';
 import type { CallLog } from '@/types/database';
 
 async function getCalls(): Promise<CallLog[]> {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { data, error } = await supabase
     .from('call_logs')

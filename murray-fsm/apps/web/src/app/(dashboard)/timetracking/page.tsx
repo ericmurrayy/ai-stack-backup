@@ -38,7 +38,7 @@ interface TimeEntryRow {
 // ---------- Data Fetcher ----------
 
 async function getTimeData() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const now = new Date();
   const weekStart = new Date(now);
   weekStart.setDate(now.getDate() - now.getDay());

@@ -2,9 +2,10 @@
 // ===================================
 
 import { createClient } from '@/lib/supabase/server';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { logAction } from '@/lib/audit-log';
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const { actionId, reason } = await request.json();
 
@@ -12,7 +13,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'actionId is required' }, { status: 400 });
     }
 
-    const supabase = createClient();
+    const supabase = await createClient();
 
     // Get current user
     const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -41,6 +42,16 @@ export async function POST(request: Request) {
     if (!data) {
       return NextResponse.json({ error: 'Action not found or already processed' }, { status: 404 });
     }
+
+    logAction(request, {
+      ownerId: user.id,
+      actorId: user.id,
+      actorEmail: user.email,
+      action: 'approval.rejected',
+      resourceType: 'action_queue',
+      resourceId: actionId,
+      metadata: { reason: reason || 'No reason provided' },
+    });
 
     return NextResponse.json({ success: true, action: data });
   } catch (error) {

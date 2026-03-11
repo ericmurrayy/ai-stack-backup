@@ -5,14 +5,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { API_SCOPE_DESCRIPTIONS, type ApiKeyScope } from '@murray-fsm/services';
+import { logAction } from '@/lib/audit-log';
 
 // GET /api/api-keys/[keyId] - Get API key details and usage
 export async function GET(
   request: NextRequest,
-  { params }: { params: { keyId: string } }
+  { params }: { params: Promise<{ keyId: string }> }
 ) {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
@@ -23,7 +24,7 @@ export async function GET(
     const { data: apiKey, error } = await supabase
       .from('api_keys')
       .select('id, name, key_prefix, scopes, created_at, expires_at, last_used_at, is_active, rate_limit_per_minute, allowed_ips, description')
-      .eq('id', params.keyId)
+      .eq('id', (await params).keyId)
       .eq('owner_id', user.id)
       .eq('deleted', false)
       .single();
@@ -36,7 +37,7 @@ export async function GET(
     const { data: usage } = await supabase
       .from('api_key_usage')
       .select('*')
-      .eq('api_key_id', params.keyId)
+      .eq('api_key_id', (await params).keyId)
       .order('created_at', { ascending: false })
       .limit(100);
 
@@ -45,7 +46,7 @@ export async function GET(
     const { data: recentUsage } = await supabase
       .from('api_key_usage')
       .select('status_code')
-      .eq('api_key_id', params.keyId)
+      .eq('api_key_id', (await params).keyId)
       .gte('created_at', twentyFourHoursAgo);
 
     const stats = {
@@ -72,10 +73,10 @@ export async function GET(
 // PATCH /api/api-keys/[keyId] - Update API key
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { keyId: string } }
+  { params }: { params: Promise<{ keyId: string }> }
 ) {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
@@ -111,13 +112,23 @@ export async function PATCH(
     const { data, error } = await supabase
       .from('api_keys')
       .update(updates)
-      .eq('id', params.keyId)
+      .eq('id', (await params).keyId)
       .eq('owner_id', user.id)
       .eq('deleted', false)
       .select('id, name, key_prefix, scopes, is_active')
       .single();
 
     if (error) throw error;
+
+    logAction(request, {
+      ownerId: user.id,
+      actorId: user.id,
+      actorEmail: user.email,
+      action: 'api_key.updated',
+      resourceType: 'api_key',
+      resourceId: (await params).keyId,
+      metadata: { fields: Object.keys(updates).filter(k => k !== 'updated_at') },
+    });
 
     return NextResponse.json({
       success: true,
@@ -135,10 +146,10 @@ export async function PATCH(
 // DELETE /api/api-keys/[keyId] - Revoke/delete API key
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { keyId: string } }
+  { params }: { params: Promise<{ keyId: string }> }
 ) {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
@@ -152,10 +163,19 @@ export async function DELETE(
         is_active: false,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', params.keyId)
+      .eq('id', (await params).keyId)
       .eq('owner_id', user.id);
 
     if (error) throw error;
+
+    logAction(request, {
+      ownerId: user.id,
+      actorId: user.id,
+      actorEmail: user.email,
+      action: 'api_key.revoked',
+      resourceType: 'api_key',
+      resourceId: (await params).keyId,
+    });
 
     return NextResponse.json({
       success: true,

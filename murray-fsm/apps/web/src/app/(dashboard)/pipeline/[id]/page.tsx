@@ -32,7 +32,7 @@ import { notFound } from 'next/navigation';
 // ---------- Data Fetcher ----------
 
 async function getLeadDetail(leadId: string) {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { data: lead, error } = await supabase
     .from('leads')
@@ -99,9 +99,9 @@ async function getLeadDetail(leadId: string) {
 export default async function LeadDetailPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
-  const data = await getLeadDetail(params.id);
+  const data = await getLeadDetail((await params).id);
 
   if (!data) {
     notFound();

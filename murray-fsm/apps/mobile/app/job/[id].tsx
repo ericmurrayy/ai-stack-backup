@@ -147,7 +147,7 @@ export default function JobDetailScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ headerTitle: job.title }} />
+      <Stack.Screen options={{ headerTitle: job.title ?? 'Job Details' }} />
       <ScrollView style={styles.container}>
         <View style={styles.content}>
           {/* Header Card */}

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Bell } from 'lucide-react';
+import { Bell, Loader2 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { formatRelativeTime } from '@/lib/utils';
 
@@ -49,29 +49,105 @@ export function NotificationBell() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [userId, setUserId] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // ---- Fetch notifications ------------------------------------------------
+  // ---- Resolve current user -------------------------------------------------
+
+  useEffect(() => {
+    async function getUser() {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      setUserId(user?.id ?? null);
+    }
+    getUser();
+  }, []);
+
+  // ---- Fetch notifications (scoped to owner_id) ----------------------------
 
   const fetchNotifications = useCallback(async () => {
+    if (!userId) return;
+
+    setLoading(true);
     const supabase = createClient();
-    const { data } = await supabase
+
+    const { data, error } = await supabase
       .from('notifications')
       .select('*')
+      .eq('owner_id', userId)
       .order('created_at', { ascending: false })
       .limit(20);
+
+    if (error) {
+      console.error('[NotificationBell] fetch error:', error);
+      setLoading(false);
+      return;
+    }
 
     if (data) {
       setNotifications(data as Notification[]);
       setUnreadCount(data.filter((n: Notification) => !n.is_read).length);
     }
-  }, []);
+    setLoading(false);
+  }, [userId]);
 
   useEffect(() => {
     fetchNotifications();
   }, [fetchNotifications]);
 
-  // ---- Click outside to close ---------------------------------------------
+  // ---- Realtime subscription (filtered to user's notifications) ------------
+
+  useEffect(() => {
+    if (!userId) return;
+
+    const supabase = createClient();
+    const channel = supabase
+      .channel('notifications-realtime')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `owner_id=eq.${userId}`,
+        },
+        (payload) => {
+          const newNotif = payload.new as Notification;
+          setNotifications((prev) => [newNotif, ...prev].slice(0, 20));
+          setUnreadCount((c) => c + 1);
+        },
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'notifications',
+          filter: `owner_id=eq.${userId}`,
+        },
+        (payload) => {
+          const updated = payload.new as Notification;
+          setNotifications((prev) =>
+            prev.map((n) => (n.id === updated.id ? updated : n)),
+          );
+          // Recalculate unread count from current list
+          setNotifications((prev) => {
+            setUnreadCount(prev.filter((n) => !n.is_read).length);
+            return prev;
+          });
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [userId]);
+
+  // ---- Click outside to close -----------------------------------------------
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -86,7 +162,7 @@ export function NotificationBell() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // ---- Mark single notification as read -----------------------------------
+  // ---- Mark single notification as read ------------------------------------
 
   async function markAsRead(notificationId: string) {
     const supabase = createClient();
@@ -105,13 +181,15 @@ export function NotificationBell() {
     setUnreadCount((c) => Math.max(0, c - 1));
   }
 
-  // ---- Mark all as read ---------------------------------------------------
+  // ---- Mark all as read -----------------------------------------------------
 
   async function markAllRead() {
+    if (!userId) return;
     const supabase = createClient();
     await supabase
       .from('notifications')
       .update({ is_read: true, read_at: new Date().toISOString() })
+      .eq('owner_id', userId)
       .eq('is_read', false);
 
     setNotifications((prev) =>
@@ -124,7 +202,7 @@ export function NotificationBell() {
     setUnreadCount(0);
   }
 
-  // ---- Render -------------------------------------------------------------
+  // ---- Render ---------------------------------------------------------------
 
   return (
     <div ref={containerRef} className="relative">
@@ -165,7 +243,13 @@ export function NotificationBell() {
 
           {/* Notification list */}
           <div className="max-h-96 overflow-y-auto">
-            {notifications.length === 0 ? (
+            {loading ? (
+              /* Loading state */
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
+                <span className="ml-2 text-sm text-slate-400">Loading...</span>
+              </div>
+            ) : notifications.length === 0 ? (
               <div className="px-4 py-8 text-center text-sm text-slate-400">
                 No notifications
               </div>

@@ -29,6 +29,8 @@ import {
   Plus,
 } from 'lucide-react';
 import { notFound } from 'next/navigation';
+import { EstimateActions } from './EstimateActions';
+import { PaymentSection } from './PaymentSection';
 
 // ---------- Types matching the live DB schema ----------
 
@@ -75,7 +77,7 @@ const estimateStatusConfig: Record<string, { label: string; variant: 'default' |
   draft: { label: 'Draft', variant: 'default' },
   sent: { label: 'Awaiting Approval', variant: 'warning' },
   approved: { label: 'Approved', variant: 'success' },
-  declined: { label: 'Declined', variant: 'danger' },
+  rejected: { label: 'Declined', variant: 'danger' },
   expired: { label: 'Expired', variant: 'default' },
 };
 
@@ -106,7 +108,7 @@ const STATUS_STEPS = [
 // ---------- Data fetching ----------
 
 async function getPortalData(token: string) {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   // 1. Verify token from customer_portal_tokens
   const { data: portalToken } = await supabase
@@ -166,9 +168,10 @@ async function getPortalData(token: string) {
 export default async function CustomerPortalPage({
   params,
 }: {
-  params: { token: string };
+  params: Promise<{ token: string }>;
 }) {
-  const data = await getPortalData(params.token);
+  const { token } = await params;
+  const data = await getPortalData(token);
 
   if (!data) {
     notFound();
@@ -428,14 +431,12 @@ export default async function CustomerPortalPage({
                           </div>
                         </div>
                         {isActionable && !isExpired && (
-                          <div className="flex gap-2">
-                            <Button size="sm" variant="danger">
-                              Decline
-                            </Button>
-                            <Button size="sm" variant="primary">
-                              Approve
-                            </Button>
-                          </div>
+                          <EstimateActions
+                            token={token}
+                            estimateId={estimate.id}
+                            estimateNumber={estimate.estimate_number}
+                            totalCents={estimate.total_cents}
+                          />
                         )}
                       </div>
                     </div>
@@ -515,6 +516,18 @@ export default async function CustomerPortalPage({
             </Card>
           )}
         </section>
+
+        {/* Payment Section - for completed jobs with balances */}
+        {completedJobs.length > 0 && (
+          <section>
+            <h2 className="text-lg font-semibold text-slate-900 mb-4">Payments</h2>
+            <Card className="p-6 text-center">
+              <p className="text-slate-500 mb-2">
+                If you have an outstanding balance, your technician will provide you with a payment link.
+              </p>
+            </Card>
+          </section>
+        )}
 
         {/* Book New Service CTA */}
         <Card className="p-6 text-center">

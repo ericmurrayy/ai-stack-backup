@@ -39,7 +39,7 @@ import { notFound } from 'next/navigation';
 // ---------- Data Fetcher ----------
 
 async function getCustomerDetail(customerId: string) {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   // Customer
   const { data: customer, error } = await supabase
@@ -147,9 +147,9 @@ async function getCustomerDetail(customerId: string) {
 export default async function CustomerDetailPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
-  const data = await getCustomerDetail(params.id);
+  const data = await getCustomerDetail((await params).id);
 
   if (!data) {
     notFound();

@@ -4,31 +4,54 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { authenticateApiRequest } from '@/lib/api-auth';
+import { authenticateAndRateLimit } from '@/lib/api-middleware';
+import { applyRateLimitHeaders } from '@/lib/rate-limiter';
 import { hasScope, optimizeRoute, dispatchJobs, findNearestTechnician } from '@murray-fsm/services';
+import { z } from 'zod';
+import {
+  validateBody,
+  validateQuery,
+  isoDateString,
+  uuidString,
+  latLngQuerySchema,
+  ROUTE_OPTIMIZE_MODES,
+} from '@/lib/api-validation';
+
+// --- Zod Schemas ---
+
+const optimizeBodySchema = z.object({
+  date: isoDateString.optional(),
+  technicianIds: z.array(uuidString).max(50, 'Too many technician IDs (max 50)').optional(),
+  mode: z.enum(ROUTE_OPTIMIZE_MODES).default('optimize'),
+});
+
+const nearestQuerySchema = latLngQuerySchema;
 
 // POST /api/v1/routes/optimize - Optimize routes for a day
 export async function POST(request: NextRequest) {
-  const auth = await authenticateApiRequest(request);
+  const { authenticated, auth, rateLimit, error: authError } = await authenticateAndRateLimit(request);
 
-  if (!auth.authenticated) {
-    return NextResponse.json(
-      { error: auth.error, code: 'UNAUTHORIZED' },
-      { status: auth.statusCode || 401 }
-    );
-  }
+  if (!authenticated || !rateLimit.allowed) return authError!;
 
   if (!hasScope(auth.scopes!, 'read:jobs') || !hasScope(auth.scopes!, 'read:team')) {
-    return NextResponse.json(
-      { error: 'Insufficient permissions', code: 'FORBIDDEN' },
-      { status: 403 }
+    return applyRateLimitHeaders(
+      NextResponse.json(
+        { error: 'Insufficient permissions', code: 'FORBIDDEN' },
+        { status: 403 }
+      ),
+      rateLimit
     );
   }
 
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
     const body = await request.json();
-    const { date, technicianIds, mode = 'optimize' } = body;
+
+    // Validate request body
+    const bodyResult = validateBody(optimizeBodySchema, body);
+    if (!bodyResult.success) return bodyResult.response;
+
+    const { date, technicianIds, mode } = bodyResult.data;
 
     // Get the target date (default to today)
     const targetDate = date ? new Date(date) : new Date();
@@ -185,10 +208,13 @@ export async function POST(request: NextRequest) {
       };
     }
 
-    return NextResponse.json({
-      success: true,
-      data: result,
-    });
+    return applyRateLimitHeaders(
+      NextResponse.json({
+        success: true,
+        data: result,
+      }),
+      rateLimit
+    );
   } catch (error) {
     console.error('Route optimization error:', error);
     return NextResponse.json(
@@ -200,35 +226,29 @@ export async function POST(request: NextRequest) {
 
 // GET /api/v1/routes/nearest - Find nearest available technician
 export async function GET(request: NextRequest) {
-  const auth = await authenticateApiRequest(request);
+  const { authenticated, auth, rateLimit, error: authError } = await authenticateAndRateLimit(request);
 
-  if (!auth.authenticated) {
-    return NextResponse.json(
-      { error: auth.error, code: 'UNAUTHORIZED' },
-      { status: auth.statusCode || 401 }
-    );
-  }
+  if (!authenticated || !rateLimit.allowed) return authError!;
 
   if (!hasScope(auth.scopes!, 'read:team')) {
-    return NextResponse.json(
-      { error: 'Insufficient permissions', code: 'FORBIDDEN' },
-      { status: 403 }
+    return applyRateLimitHeaders(
+      NextResponse.json(
+        { error: 'Insufficient permissions', code: 'FORBIDDEN' },
+        { status: 403 }
+      ),
+      rateLimit
     );
   }
 
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
     const { searchParams } = new URL(request.url);
 
-    const lat = parseFloat(searchParams.get('lat') || '0');
-    const lng = parseFloat(searchParams.get('lng') || '0');
+    // Validate query parameters
+    const queryResult = validateQuery(nearestQuerySchema, searchParams);
+    if (!queryResult.success) return queryResult.response;
 
-    if (!lat || !lng) {
-      return NextResponse.json(
-        { error: 'lat and lng are required', code: 'VALIDATION_ERROR' },
-        { status: 400 }
-      );
-    }
+    const { lat, lng } = queryResult.data;
 
     // Get technician current locations
     const { data: locations } = await supabase
@@ -265,28 +285,34 @@ export async function GET(request: NextRequest) {
     );
 
     if (!nearest) {
-      return NextResponse.json({
-        success: true,
-        data: null,
-        message: 'No available technicians found',
-      });
+      return applyRateLimitHeaders(
+        NextResponse.json({
+          success: true,
+          data: null,
+          message: 'No available technicians found',
+        }),
+        rateLimit
+      );
     }
 
     const tech = techsWithLocations.find(t => t.id === nearest.technicianId);
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        technician: {
-          id: tech?.id,
-          name: tech?.name,
-          phone: tech?.phone,
-          color: tech?.color,
+    return applyRateLimitHeaders(
+      NextResponse.json({
+        success: true,
+        data: {
+          technician: {
+            id: tech?.id,
+            name: tech?.name,
+            phone: tech?.phone,
+            color: tech?.color,
+          },
+          distance: Math.round(nearest.distance / 1000 * 10) / 10, // km
+          eta: nearest.eta, // minutes
         },
-        distance: Math.round(nearest.distance / 1000 * 10) / 10, // km
-        eta: nearest.eta, // minutes
-      },
-    });
+      }),
+      rateLimit
+    );
   } catch (error) {
     console.error('Nearest technician error:', error);
     return NextResponse.json(

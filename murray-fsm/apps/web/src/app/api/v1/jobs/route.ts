@@ -4,14 +4,15 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { authenticateApiRequest, logApiUsage } from '@/lib/api-auth';
+import { logApiUsage } from '@/lib/api-auth';
+import { authenticateAndRateLimit } from '@/lib/api-middleware';
+import { applyRateLimitHeaders } from '@/lib/rate-limiter';
 import { hasScope } from '@murray-fsm/services';
 import { z } from 'zod';
-import { validateBody, validateQuery, positiveIntString, nonNegativeIntString, isoDateString, uuidString } from '@/lib/api-validation';
+import { validateBody, validateQuery, positiveIntString, nonNegativeIntString, isoDateString, uuidString, JOB_STATUSES } from '@/lib/api-validation';
+import { dispatchWebhookEvent } from '@/lib/webhook-dispatch';
 
 // --- Zod Schemas ---
-
-const JOB_STATUSES = ['new', 'contacted', 'scheduled', 'in_progress', 'completed', 'cancelled', 'spam'] as const;
 
 const listJobsQuerySchema = z.object({
   status: z.enum(JOB_STATUSES).optional(),
@@ -40,24 +41,22 @@ const createJobBodySchema = z.object({
 // GET /api/v1/jobs - List jobs
 export async function GET(request: NextRequest) {
   const startTime = Date.now();
-  const auth = await authenticateApiRequest(request);
+  const { authenticated, auth, rateLimit, error: authError } = await authenticateAndRateLimit(request);
 
-  if (!auth.authenticated) {
-    return NextResponse.json(
-      { error: auth.error, code: 'UNAUTHORIZED' },
-      { status: auth.statusCode || 401 }
-    );
-  }
+  if (!authenticated || !rateLimit.allowed) return authError!;
 
   if (!hasScope(auth.scopes!, 'read:jobs')) {
-    return NextResponse.json(
-      { error: 'Insufficient permissions', code: 'FORBIDDEN' },
-      { status: 403 }
+    return applyRateLimitHeaders(
+      NextResponse.json(
+        { error: 'Insufficient permissions', code: 'FORBIDDEN' },
+        { status: 403 }
+      ),
+      rateLimit
     );
   }
 
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
     const { searchParams } = new URL(request.url);
 
     // Validate query parameters
@@ -103,7 +102,7 @@ export async function GET(request: NextRequest) {
     });
 
     // Log usage
-    await logApiUsage(
+    logApiUsage(
       auth.apiKeyId!,
       auth.ownerId!,
       '/api/v1/jobs',
@@ -111,9 +110,9 @@ export async function GET(request: NextRequest) {
       200,
       Date.now() - startTime,
       request
-    );
+    ).catch(() => {});
 
-    return response;
+    return applyRateLimitHeaders(response, rateLimit);
   } catch (error) {
     console.error('Jobs API error:', error);
     return NextResponse.json(
@@ -126,24 +125,22 @@ export async function GET(request: NextRequest) {
 // POST /api/v1/jobs - Create a job
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
-  const auth = await authenticateApiRequest(request);
+  const { authenticated, auth, rateLimit, error: authError } = await authenticateAndRateLimit(request);
 
-  if (!auth.authenticated) {
-    return NextResponse.json(
-      { error: auth.error, code: 'UNAUTHORIZED' },
-      { status: auth.statusCode || 401 }
-    );
-  }
+  if (!authenticated || !rateLimit.allowed) return authError!;
 
   if (!hasScope(auth.scopes!, 'write:jobs')) {
-    return NextResponse.json(
-      { error: 'Insufficient permissions', code: 'FORBIDDEN' },
-      { status: 403 }
+    return applyRateLimitHeaders(
+      NextResponse.json(
+        { error: 'Insufficient permissions', code: 'FORBIDDEN' },
+        { status: 403 }
+      ),
+      rateLimit
     );
   }
 
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
     const body = await request.json();
 
     // Validate request body
@@ -179,7 +176,10 @@ export async function POST(request: NextRequest) {
       data: { job },
     }, { status: 201 });
 
-    await logApiUsage(
+    // Fire-and-forget: notify webhook subscribers
+    dispatchWebhookEvent(auth.ownerId!, 'job.created', { job });
+
+    logApiUsage(
       auth.apiKeyId!,
       auth.ownerId!,
       '/api/v1/jobs',
@@ -187,9 +187,9 @@ export async function POST(request: NextRequest) {
       201,
       Date.now() - startTime,
       request
-    );
+    ).catch(() => {});
 
-    return response;
+    return applyRateLimitHeaders(response, rateLimit);
   } catch (error) {
     console.error('Create job error:', error);
     return NextResponse.json(

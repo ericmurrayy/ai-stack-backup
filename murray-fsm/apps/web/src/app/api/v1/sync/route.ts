@@ -4,18 +4,36 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { authenticateApiRequest } from '@/lib/api-auth';
+import { authenticateAndRateLimit } from '@/lib/api-middleware';
+import { applyRateLimitHeaders } from '@/lib/rate-limiter';
 import { hasScope } from '@murray-fsm/services';
+import { z } from 'zod';
+import {
+  validateBody,
+  isoDateString,
+  uuidString,
+  SYNC_CHANGE_ACTIONS,
+} from '@/lib/api-validation';
 
-interface SyncRequest {
-  lastSyncedAt?: string;
-  deviceId: string;
-  changes?: {
-    jobs?: Array<{ id: string; action: 'create' | 'update' | 'delete'; data?: Record<string, unknown> }>;
-    timeEntries?: Array<{ id: string; action: 'create' | 'update' | 'delete'; data?: Record<string, unknown> }>;
-    photos?: Array<{ id: string; action: 'create' | 'delete'; data?: Record<string, unknown> }>;
-  };
-}
+// --- Zod Schemas ---
+
+const syncChangeItemSchema = z.object({
+  id: uuidString,
+  action: z.enum(SYNC_CHANGE_ACTIONS),
+  data: z.record(z.unknown()).optional(),
+});
+
+const syncRequestBodySchema = z.object({
+  lastSyncedAt: isoDateString.optional(),
+  deviceId: z.string().min(1, 'deviceId is required').max(200),
+  changes: z.object({
+    jobs: z.array(syncChangeItemSchema).max(100, 'Too many job changes (max 100)').optional(),
+    timeEntries: z.array(syncChangeItemSchema).max(100, 'Too many time entry changes (max 100)').optional(),
+    photos: z.array(syncChangeItemSchema).max(50, 'Too many photo changes (max 50)').optional(),
+  }).optional(),
+});
+
+type SyncRequest = z.infer<typeof syncRequestBodySchema>;
 
 interface SyncResponse {
   jobs: unknown[];
@@ -31,33 +49,39 @@ interface SyncResponse {
 // POST /api/v1/sync - Batch sync for mobile
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
-  const auth = await authenticateApiRequest(request);
+  const { authenticated, auth, rateLimit, error: authError } = await authenticateAndRateLimit(request);
 
-  if (!auth.authenticated) {
-    return NextResponse.json(
-      { error: auth.error, code: 'UNAUTHORIZED' },
-      { status: auth.statusCode || 401 }
-    );
-  }
+  if (!authenticated || !rateLimit.allowed) return authError!;
 
   if (!hasScope(auth.scopes!, 'read:jobs')) {
-    return NextResponse.json(
-      { error: 'Insufficient permissions', code: 'FORBIDDEN' },
-      { status: 403 }
+    return applyRateLimitHeaders(
+      NextResponse.json(
+        { error: 'Insufficient permissions', code: 'FORBIDDEN' },
+        { status: 403 }
+      ),
+      rateLimit
     );
   }
 
   try {
-    const supabase = createClient();
-    const body: SyncRequest = await request.json();
-    const { lastSyncedAt, deviceId, changes } = body;
+    const supabase = await createClient();
+    const body = await request.json();
+
+    // Validate request body
+    const bodyResult = validateBody(syncRequestBodySchema, body);
+    if (!bodyResult.success) return bodyResult.response;
+
+    const { lastSyncedAt, deviceId, changes } = bodyResult.data;
 
     // Process any incoming changes from device (requires write scope)
     if (changes) {
       if (!hasScope(auth.scopes!, 'write:jobs')) {
-        return NextResponse.json(
-          { error: 'write:jobs scope required to push changes', code: 'FORBIDDEN' },
-          { status: 403 }
+        return applyRateLimitHeaders(
+          NextResponse.json(
+            { error: 'write:jobs scope required to push changes', code: 'FORBIDDEN' },
+            { status: 403 }
+          ),
+          rateLimit
         );
       }
       await processChanges(supabase, auth.ownerId!, changes);
@@ -160,11 +184,14 @@ export async function POST(request: NextRequest) {
       hasMore: (jobs?.length || 0) >= 500 || (customers?.length || 0) >= 500,
     };
 
-    return NextResponse.json({
-      success: true,
-      data: response,
-      syncDuration: Date.now() - startTime,
-    });
+    return applyRateLimitHeaders(
+      NextResponse.json({
+        success: true,
+        data: response,
+        syncDuration: Date.now() - startTime,
+      }),
+      rateLimit
+    );
   } catch (error) {
     console.error('Sync API error:', error);
     return NextResponse.json(
@@ -175,7 +202,7 @@ export async function POST(request: NextRequest) {
 }
 
 async function processChanges(
-  supabase: ReturnType<typeof createClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
   ownerId: string,
   changes: SyncRequest['changes']
 ): Promise<void> {

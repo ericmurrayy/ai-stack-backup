@@ -73,7 +73,7 @@ const STATUS_STEPS = [
 // ---------- Data Fetcher ----------
 
 async function getJobDetail(jobId: string) {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { data: job, error } = await supabase
     .from('jobs')
@@ -135,9 +135,9 @@ async function getJobDetail(jobId: string) {
 export default async function JobDetailPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
-  const data = await getJobDetail(params.id);
+  const data = await getJobDetail((await params).id);
 
   if (!data) {
     notFound();

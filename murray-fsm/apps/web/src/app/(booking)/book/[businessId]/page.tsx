@@ -53,7 +53,7 @@ interface TimeSlot {
 }
 
 async function getBusinessData(businessId: string): Promise<BusinessData | null> {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { data: settings } = await supabase
     .from('business_settings')
@@ -136,16 +136,18 @@ export default async function BookingPage({
   params,
   searchParams,
 }: {
-  params: { businessId: string };
-  searchParams: { step?: string };
+  params: Promise<{ businessId: string }>;
+  searchParams: Promise<{ step?: string }>;
 }) {
-  const business = await getBusinessData(params.businessId);
+  const { businessId } = await params;
+  const { step: stepParam } = await searchParams;
+  const business = await getBusinessData(businessId);
 
   if (!business) {
     notFound();
   }
 
-  const step = parseInt(searchParams.step || '1');
+  const step = parseInt(stepParam || '1');
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
@@ -300,22 +302,26 @@ export default async function BookingPage({
               <form className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                    <label htmlFor="booking-first-name" className="block text-sm font-medium text-slate-700 mb-1">
                       First Name *
                     </label>
                     <input
+                      id="booking-first-name"
                       type="text"
                       required
+                      placeholder="First name"
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
+                    <label htmlFor="booking-last-name" className="block text-sm font-medium text-slate-700 mb-1">
                       Last Name *
                     </label>
                     <input
+                      id="booking-last-name"
                       type="text"
                       required
+                      placeholder="Last name"
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
@@ -355,24 +361,28 @@ export default async function BookingPage({
                 </div>
                 <div className="grid grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">City *</label>
+                    <label htmlFor="booking-city" className="block text-sm font-medium text-slate-700 mb-1">City *</label>
                     <input
+                      id="booking-city"
                       type="text"
                       required
+                      placeholder="City"
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">State *</label>
-                    <select className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <label htmlFor="booking-state" className="block text-sm font-medium text-slate-700 mb-1">State *</label>
+                    <select id="booking-state" title="State" className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
                       <option>CO</option>
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">ZIP *</label>
+                    <label htmlFor="booking-zip" className="block text-sm font-medium text-slate-700 mb-1">ZIP *</label>
                     <input
+                      id="booking-zip"
                       type="text"
                       required
+                      placeholder="ZIP code"
                       className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
