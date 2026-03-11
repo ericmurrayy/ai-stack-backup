@@ -150,11 +150,14 @@ export default async function BookingPage({
   const step = parseInt(stepParam || '1');
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+    <div
+      className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100"
+      style={{ '--biz-primary': business.primary_color, '--biz-secondary': business.secondary_color } as React.CSSProperties}
+    >
       {/* Header */}
       <header
-        className="bg-white shadow-sm"
-        style={{ borderTopColor: business.primary_color, borderTopWidth: '4px' }}
+        className="bg-white shadow-sm border-t-4"
+        style={{ borderTopColor: 'var(--biz-primary)' }}
       >
         <div className="max-w-2xl mx-auto px-6 py-4">
           <div className="flex items-center gap-4">
@@ -163,7 +166,7 @@ export default async function BookingPage({
             ) : (
               <div
                 className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-xl"
-                style={{ backgroundColor: business.primary_color }}
+                style={{ backgroundColor: 'var(--biz-primary)' }}
               >
                 {business.name.charAt(0)}
               </div>
@@ -192,7 +195,7 @@ export default async function BookingPage({
                     ? 'text-white'
                     : 'bg-slate-200 text-slate-500'
                 }`}
-                style={step >= s.num ? { backgroundColor: business.primary_color } : {}}
+                style={step >= s.num ? { backgroundColor: 'var(--biz-primary)' } : {}}
               >
                 {step > s.num ? <CheckCircle className="w-5 h-5" /> : s.num}
               </div>
@@ -222,9 +225,9 @@ export default async function BookingPage({
                     <div className="flex items-center gap-4">
                       <div
                         className="p-3 rounded-lg"
-                        style={{ backgroundColor: `${business.primary_color}15` }}
+                        style={{ backgroundColor: 'color-mix(in srgb, var(--biz-primary) 10%, transparent)' }}
                       >
-                        <IconComponent className="w-6 h-6" style={{ color: business.primary_color }} />
+                        <IconComponent className="w-6 h-6" style={{ color: 'var(--biz-primary)' }} />
                       </div>
                       <div className="flex-1">
                         <h3 className="font-medium text-slate-900">{info.label}</h3>
@@ -327,10 +330,11 @@ export default async function BookingPage({
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                  <label htmlFor="booking-phone" className="block text-sm font-medium text-slate-700 mb-1">
                     Phone Number *
                   </label>
                   <input
+                    id="booking-phone"
                     type="tel"
                     required
                     placeholder="(555) 123-4567"
@@ -338,10 +342,11 @@ export default async function BookingPage({
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                  <label htmlFor="booking-email" className="block text-sm font-medium text-slate-700 mb-1">
                     Email Address *
                   </label>
                   <input
+                    id="booking-email"
                     type="email"
                     required
                     placeholder="you@example.com"
@@ -349,10 +354,11 @@ export default async function BookingPage({
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                  <label htmlFor="booking-address" className="block text-sm font-medium text-slate-700 mb-1">
                     Service Address *
                   </label>
                   <input
+                    id="booking-address"
                     type="text"
                     required
                     placeholder="123 Main St"
@@ -388,10 +394,11 @@ export default async function BookingPage({
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
+                  <label htmlFor="booking-notes" className="block text-sm font-medium text-slate-700 mb-1">
                     Additional Notes
                   </label>
                   <textarea
+                    id="booking-notes"
                     rows={3}
                     placeholder="Describe the issue or any special instructions..."
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -407,9 +414,9 @@ export default async function BookingPage({
           <div className="text-center">
             <div
               className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
-              style={{ backgroundColor: `${business.primary_color}15` }}
+              style={{ backgroundColor: 'color-mix(in srgb, var(--biz-primary) 10%, transparent)' }}
             >
-              <CheckCircle className="w-8 h-8" style={{ color: business.primary_color }} />
+              <CheckCircle className="w-8 h-8" style={{ color: 'var(--biz-primary)' }} />
             </div>
             <h2 className="text-xl font-semibold text-slate-900 mb-2">Booking Confirmed!</h2>
             <p className="text-slate-500 mb-6">
@@ -459,7 +466,7 @@ export default async function BookingPage({
             )}
             <button
               className="px-6 py-2 text-sm font-medium text-white rounded-lg"
-              style={{ backgroundColor: business.primary_color }}
+              style={{ backgroundColor: 'var(--biz-primary)' }}
             >
               {step === 3 ? 'Book Appointment' : 'Continue'}
             </button>

@@ -113,6 +113,7 @@ function ToastItem({ toast: t, onDismiss }: { toast: Toast; onDismiss: (id: stri
       <p className="flex-1 text-sm font-medium">{t.message}</p>
       <button
         type="button"
+        aria-label="Dismiss notification"
         onClick={handleDismiss}
         className="flex-shrink-0 p-0.5 rounded hover:bg-black/5 transition-colors"
       >
