@@ -11,6 +11,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { CustomerPicker } from '@/components/shared/CustomerPicker';
 import { ServicePicker, type ServiceItem } from '@/components/shared/ServicePicker';
+import { PriceInput } from '@/components/shared/PriceInput';
 import {
   ArrowLeft,
   Plus,
@@ -41,15 +42,6 @@ interface Customer {
 
 function generateId(): string {
   return `temp_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-}
-
-function formatCentsInput(cents: number): string {
-  return (cents / 100).toFixed(2);
-}
-
-function parseDollarsToCents(dollars: string): number {
-  const num = parseFloat(dollars);
-  return isNaN(num) ? 0 : Math.round(num * 100);
 }
 
 function formatCents(cents: number): string {
@@ -132,10 +124,9 @@ function InvoiceLineItemEditor({
           <span className="text-xs text-slate-400">×</span>
           <div className="relative">
             <span className="absolute left-2 top-1/2 -translate-y-1/2 text-sm text-slate-400">$</span>
-            <input
-              type="text"
-              value={formatCentsInput(item.unit_price_cents)}
-              onChange={(e) => onChange({ ...item, unit_price_cents: parseDollarsToCents(e.target.value) })}
+            <PriceInput
+              cents={item.unit_price_cents}
+              onChange={(c) => onChange({ ...item, unit_price_cents: c })}
               aria-label="Unit price"
               className="w-24 pl-6 pr-2 py-1.5 text-sm text-right border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
