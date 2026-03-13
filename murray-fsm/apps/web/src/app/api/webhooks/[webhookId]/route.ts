@@ -13,21 +13,22 @@ import {
 // GET /api/webhooks/[webhookId] - Get webhook details and deliveries
 export async function GET(
   request: NextRequest,
-  { params }: { params: { webhookId: string } }
+  { params }: { params: Promise<{ webhookId: string }> }
 ) {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Get webhook
+    // Get webhook (exclude secret, scoped to owner)
     const { data: webhook, error } = await supabase
       .from('webhook_endpoints')
-      .select('*')
-      .eq('id', params.webhookId)
+      .select('id, url, events, description, is_active, failure_count, created_at, updated_at')
+      .eq('id', (await params).webhookId)
+      .eq('owner_id', user.id)
       .eq('deleted', false)
       .single();
 
@@ -39,7 +40,7 @@ export async function GET(
     const { data: deliveries } = await supabase
       .from('webhook_deliveries')
       .select('*')
-      .eq('webhook_id', params.webhookId)
+      .eq('webhook_id', (await params).webhookId)
       .order('created_at', { ascending: false })
       .limit(50);
 
@@ -59,10 +60,10 @@ export async function GET(
 // PATCH /api/webhooks/[webhookId] - Update webhook
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { webhookId: string } }
+  { params }: { params: Promise<{ webhookId: string }> }
 ) {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
@@ -114,9 +115,10 @@ export async function PATCH(
     const { data, error } = await supabase
       .from('webhook_endpoints')
       .update(updates)
-      .eq('id', params.webhookId)
+      .eq('id', (await params).webhookId)
+      .eq('owner_id', user.id)
       .eq('deleted', false)
-      .select()
+      .select('id, url, events, description, is_active, failure_count, created_at, updated_at')
       .single();
 
     if (error) throw error;
@@ -138,10 +140,10 @@ export async function PATCH(
 // DELETE /api/webhooks/[webhookId] - Delete webhook
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { webhookId: string } }
+  { params }: { params: Promise<{ webhookId: string }> }
 ) {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
@@ -154,7 +156,8 @@ export async function DELETE(
         deleted: true,
         updated_at: new Date().toISOString(),
       })
-      .eq('id', params.webhookId);
+      .eq('id', (await params).webhookId)
+      .eq('owner_id', user.id);
 
     if (error) throw error;
 

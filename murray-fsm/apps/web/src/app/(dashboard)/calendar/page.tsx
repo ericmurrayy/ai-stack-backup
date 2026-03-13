@@ -14,7 +14,7 @@ interface CalendarEventWithJob extends CalendarEvent {
 }
 
 async function getCalendarEvents(): Promise<CalendarEventWithJob[]> {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { data, error } = await supabase
     .from('calendar_events')
@@ -132,11 +132,11 @@ export default async function CalendarPage() {
                         {event.job ? (
                           <div>
                             <div className="font-medium text-slate-900">
-                              {event.job.title}
+                              {event.job.issue_description || `Job #${event.job.job_number || ''}`}
                             </div>
-                            {event.job.scheduled_start && (
+                            {event.job.scheduled_at && (
                               <div className="text-sm text-slate-500">
-                                {formatDate(event.job.scheduled_start, 'MMM d, yyyy h:mm a')}
+                                {formatDate(event.job.scheduled_at, 'MMM d, yyyy h:mm a')}
                               </div>
                             )}
                           </div>

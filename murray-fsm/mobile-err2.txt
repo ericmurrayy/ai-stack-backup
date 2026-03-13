@@ -1,0 +1,26 @@
+
+> @murray-fsm/mobile@1.0.0 typecheck D:\murrayfsm\murray-fsm-repo\murray-fsm\apps\mobile
+> tsc --noEmit
+
+src/components/Input.tsx(29,13): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: TextInputProps): TextInput', gave the following error.
+    Type '"" | { borderColor: string; } | undefined' is not assignable to type 'TextStyle | Falsy | RegisteredStyle<TextStyle> | RecursiveArray<TextStyle | Falsy | RegisteredStyle<TextStyle>> | readonly (TextStyle | ... 1 more ... | RegisteredStyle<...>)[]'.
+      Type '""' is not assignable to type 'TextStyle | Falsy | RegisteredStyle<TextStyle> | RecursiveArray<TextStyle | Falsy | RegisteredStyle<TextStyle>> | readonly (TextStyle | ... 1 more ... | RegisteredStyle<...>)[]'.
+  Overload 2 of 2, '(props: TextInputProps, context: any): TextInput', gave the following error.
+    Type '"" | { borderColor: string; } | undefined' is not assignable to type 'TextStyle | Falsy | RegisteredStyle<TextStyle> | RecursiveArray<TextStyle | Falsy | RegisteredStyle<TextStyle>> | readonly (TextStyle | ... 1 more ... | RegisteredStyle<...>)[]'.
+src/hooks/useJob.ts(129,7): error TS2783: 'job_id' is specified more than once, so this usage will be overwritten.
+src/store/index.ts(28,5): error TS2353: Object literal may only specify known properties, and 'asyncStorage' does not exist in type 'PersistOptions<any>'.
+src/store/index.ts(58,10): error TS2589: Type instantiation is excessively deep and possibly infinite.
+src/store/index.ts(58,10): error TS2769: No overload matches this call.
+  Overload 2 of 2, '(props: SyncedSupabaseProps<SupabaseClient<any, "public", "public", any, any>, string, "public", "object", any, any>): Record<string | number, any>', gave the following error.
+    Type '(from: PostgrestQueryBuilder<"public", any, string, unknown, unknown>) => PostgrestFilterBuilder<"public", any, unknown, any[], unknown, unknown, "GET">' is not assignable to type 'undefined'.
+  Overload 2 of 2, '(props: SyncedSupabaseProps<SupabaseClient<any, "public", "public", any, any>, string, "public", "object", any, any>): Record<string | number, any>', gave the following error.
+    Type '((item: T) => boolean) | undefined' is not assignable to type '((select: PostgrestFilterBuilder<"public", any, any[], string, [], unknown, unknown>, params: SyncedGetParams<any>) => PostgrestFilterBuilder<"public", any, any[], string, [], unknown, unknown>) | undefined'.
+  Overload 2 of 2, '(props: SyncedSupabaseProps<SupabaseClient<any, "public", "public", any, any>, string, "public", "object", any, any>): Record<string | number, any>', gave the following error.
+    Type '((item: any) => T) | undefined' is not assignable to type 'SyncTransform<any, any> | undefined'.
+  Overload 2 of 2, '(props: SyncedSupabaseProps<SupabaseClient<any, "public", "public", any, any>, string, "public", "object", any, any>): Record<string | number, any>', gave the following error.
+    Object literal may only specify known properties, and 'enabled' does not exist in type '{ schema?: string | undefined; filter?: string | undefined; }'.
+src/store/index.ts(61,23): error TS2589: Type instantiation is excessively deep and possibly infinite.
+D:\murrayfsm\murray-fsm-repo\murray-fsm\apps\mobile:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @murray-fsm/mobile@1.0.0 typecheck: `tsc --noEmit`
+Exit status 2

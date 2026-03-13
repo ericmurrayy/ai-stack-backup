@@ -24,7 +24,7 @@ CREATE TYPE campaign_recipient_status AS ENUM ('pending', 'sent', 'delivered', '
 CREATE TYPE time_entry_type AS ENUM ('travel', 'work', 'break');
 CREATE TYPE estimate_status AS ENUM ('draft', 'sent', 'viewed', 'approved', 'rejected', 'expired');
 CREATE TYPE agreement_type AS ENUM ('maintenance', 'warranty', 'membership');
-CREATE TYPE agreement_status AS ENUM ('active', 'expired', 'canceled');
+CREATE TYPE agreement_status AS ENUM ('active', 'expired', 'cancelled');
 CREATE TYPE billing_cycle AS ENUM ('monthly', 'quarterly', 'annual');
 CREATE TYPE job_priority AS ENUM ('low', 'normal', 'high', 'emergency');
 -- campaign_type and campaign_status already exist from previous schema

@@ -112,10 +112,13 @@ export const formatAddressOneLine = (
 // Job status formatting
 export const formatJobStatus = (status: string): string => {
   const statusMap: Record<string, string> = {
+    new: 'New',
+    contacted: 'Contacted',
     scheduled: 'Scheduled',
     in_progress: 'In Progress',
     completed: 'Completed',
-    canceled: 'Canceled',
+    cancelled: 'Cancelled',
+    spam: 'Spam',
   };
   return statusMap[status] || status;
 };

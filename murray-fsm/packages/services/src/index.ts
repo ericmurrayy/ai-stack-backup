@@ -21,3 +21,5 @@ export * from './notifications';
 export * from './agreements';
 export * from './analytics';
 export * from './dispatch';
+export * from './sms';
+export * from './portal';

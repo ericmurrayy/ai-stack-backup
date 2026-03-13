@@ -17,7 +17,7 @@ interface JobCardProps {
 }
 
 export const JobCard: React.FC<JobCardProps> = ({ job, onPress }) => {
-  const customer = useSelector(() => customers$[job.customer_id]?.get());
+  const customer = useSelector(() => job.customer_id ? customers$[job.customer_id]?.get() : null);
   const location = useSelector(() =>
     job.location_id ? locations$[job.location_id]?.get() : null
   );

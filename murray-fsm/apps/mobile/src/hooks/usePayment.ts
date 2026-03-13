@@ -77,7 +77,7 @@ export const usePayment = () => {
 
       if (presentError) {
         if (presentError.code === 'Canceled') {
-          return { success: false, error: 'Payment canceled' };
+          return { success: false, error: 'Payment cancelled' };
         }
         return { success: false, error: presentError.message };
       }

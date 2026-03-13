@@ -249,7 +249,7 @@ export interface Notification {
 
 // === Service Agreements ===
 export type AgreementType = 'maintenance' | 'warranty' | 'membership';
-export type AgreementStatus = 'active' | 'expired' | 'canceled';
+export type AgreementStatus = 'active' | 'expired' | 'cancelled';
 export type BillingCycle = 'monthly' | 'quarterly' | 'annual';
 
 export interface ServiceAgreement {

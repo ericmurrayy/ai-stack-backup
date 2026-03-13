@@ -23,7 +23,7 @@ import Link from 'next/link';
 // ---------- Types ----------
 
 type AgreementType = 'maintenance' | 'warranty' | 'membership';
-type AgreementStatus = 'active' | 'expired' | 'canceled';
+type AgreementStatus = 'active' | 'expired' | 'cancelled';
 type BillingCycle = 'monthly' | 'quarterly' | 'annual';
 
 interface AgreementCustomer {
@@ -57,7 +57,7 @@ interface ServiceAgreement {
 const statusColors: Record<AgreementStatus, string> = {
   active: 'bg-green-100 text-green-800',
   expired: 'bg-slate-100 text-slate-800',
-  canceled: 'bg-red-100 text-red-800',
+  cancelled: 'bg-red-100 text-red-800',
 };
 
 const typeConfig: Record<AgreementType, { icon: typeof Wrench; color: string; label: string }> = {
@@ -108,7 +108,7 @@ interface AgreementsData {
 }
 
 async function getAgreementsData(): Promise<AgreementsData> {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { data, error } = await supabase
     .from('service_agreements')

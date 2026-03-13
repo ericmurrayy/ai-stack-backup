@@ -3,19 +3,37 @@
 // Batch sync endpoint for offline-first mobile app
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { authenticateApiRequest } from '@/lib/api-auth';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { authenticateAndRateLimit } from '@/lib/api-middleware';
+import { applyRateLimitHeaders } from '@/lib/rate-limiter';
 import { hasScope } from '@murray-fsm/services';
+import { z } from 'zod';
+import {
+  validateBody,
+  isoDateString,
+  uuidString,
+  SYNC_CHANGE_ACTIONS,
+} from '@/lib/api-validation';
 
-interface SyncRequest {
-  lastSyncedAt?: string;
-  deviceId: string;
-  changes?: {
-    jobs?: Array<{ id: string; action: 'create' | 'update' | 'delete'; data?: Record<string, unknown> }>;
-    timeEntries?: Array<{ id: string; action: 'create' | 'update' | 'delete'; data?: Record<string, unknown> }>;
-    photos?: Array<{ id: string; action: 'create' | 'delete'; data?: Record<string, unknown> }>;
-  };
-}
+// --- Zod Schemas ---
+
+const syncChangeItemSchema = z.object({
+  id: uuidString,
+  action: z.enum(SYNC_CHANGE_ACTIONS),
+  data: z.record(z.unknown()).optional(),
+});
+
+const syncRequestBodySchema = z.object({
+  lastSyncedAt: isoDateString.optional(),
+  deviceId: z.string().min(1, 'deviceId is required').max(200),
+  changes: z.object({
+    jobs: z.array(syncChangeItemSchema).max(100, 'Too many job changes (max 100)').optional(),
+    timeEntries: z.array(syncChangeItemSchema).max(100, 'Too many time entry changes (max 100)').optional(),
+    photos: z.array(syncChangeItemSchema).max(50, 'Too many photo changes (max 50)').optional(),
+  }).optional(),
+});
+
+type SyncRequest = z.infer<typeof syncRequestBodySchema>;
 
 interface SyncResponse {
   jobs: unknown[];
@@ -31,29 +49,41 @@ interface SyncResponse {
 // POST /api/v1/sync - Batch sync for mobile
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
-  const auth = await authenticateApiRequest(request);
+  const { authenticated, auth, rateLimit, error: authError } = await authenticateAndRateLimit(request);
 
-  if (!auth.authenticated) {
-    return NextResponse.json(
-      { error: auth.error, code: 'UNAUTHORIZED' },
-      { status: auth.statusCode || 401 }
-    );
-  }
+  if (!authenticated || !rateLimit.allowed) return authError!;
 
   if (!hasScope(auth.scopes!, 'read:jobs')) {
-    return NextResponse.json(
-      { error: 'Insufficient permissions', code: 'FORBIDDEN' },
-      { status: 403 }
+    return applyRateLimitHeaders(
+      NextResponse.json(
+        { error: 'Insufficient permissions', code: 'FORBIDDEN' },
+        { status: 403 }
+      ),
+      rateLimit
     );
   }
 
   try {
-    const supabase = createClient();
-    const body: SyncRequest = await request.json();
-    const { lastSyncedAt, deviceId, changes } = body;
+    const supabase = createAdminClient();
+    const body = await request.json();
 
-    // Process any incoming changes from device
+    // Validate request body
+    const bodyResult = validateBody(syncRequestBodySchema, body);
+    if (!bodyResult.success) return bodyResult.response;
+
+    const { lastSyncedAt, deviceId, changes } = bodyResult.data;
+
+    // Process any incoming changes from device (requires write scope)
     if (changes) {
+      if (!hasScope(auth.scopes!, 'write:jobs')) {
+        return applyRateLimitHeaders(
+          NextResponse.json(
+            { error: 'write:jobs scope required to push changes', code: 'FORBIDDEN' },
+            { status: 403 }
+          ),
+          rateLimit
+        );
+      }
       await processChanges(supabase, auth.ownerId!, changes);
     }
 
@@ -77,7 +107,7 @@ export async function POST(request: NextRequest) {
         .select(`
           id, title, status, service_type, scheduled_start, scheduled_end,
           total_cents, paid_cents, internal_notes, customer_notes,
-          customer_id, location_id, assigned_to, priority,
+          customer_id, location_id, assigned_technician_id, assigned_to:assigned_technician_id, priority,
           estimated_duration_minutes, created_at, updated_at, deleted
         `)
         .eq('owner_id', auth.ownerId)
@@ -106,7 +136,7 @@ export async function POST(request: NextRequest) {
       // Line items updated since last sync
       supabase
         .from('line_items')
-        .select('id, job_id, kind, name, description, quantity, unit_price_cents, total_cents, created_at, updated_at, deleted')
+        .select('id, job_id, kind, name, description, qty, unit_price_cents, total_cents, created_at, updated_at, deleted')
         .eq('owner_id', auth.ownerId)
         .gte('updated_at', syncCutoff.toISOString())
         .order('updated_at', { ascending: false })
@@ -154,11 +184,14 @@ export async function POST(request: NextRequest) {
       hasMore: (jobs?.length || 0) >= 500 || (customers?.length || 0) >= 500,
     };
 
-    return NextResponse.json({
-      success: true,
-      data: response,
-      syncDuration: Date.now() - startTime,
-    });
+    return applyRateLimitHeaders(
+      NextResponse.json({
+        success: true,
+        data: response,
+        syncDuration: Date.now() - startTime,
+      }),
+      rateLimit
+    );
   } catch (error) {
     console.error('Sync API error:', error);
     return NextResponse.json(
@@ -169,19 +202,45 @@ export async function POST(request: NextRequest) {
 }
 
 async function processChanges(
-  supabase: ReturnType<typeof createClient>,
+  supabase: ReturnType<typeof createAdminClient>,
   ownerId: string,
   changes: SyncRequest['changes']
 ): Promise<void> {
   if (!changes) return;
 
+  // Allowlists prevent arbitrary field overwrite
+  const JOB_ALLOWED_FIELDS = [
+    'title', 'status', 'service_type', 'scheduled_start', 'scheduled_end',
+    'internal_notes', 'customer_notes', 'priority', 'estimated_duration_minutes',
+    'actual_duration_minutes', 'assigned_technician_id',
+  ];
+  const TIME_ENTRY_ALLOWED_FIELDS = [
+    'job_id', 'team_member_id', 'clock_in', 'clock_out', 'break_minutes', 'notes',
+  ];
+  const PHOTO_ALLOWED_FIELDS = [
+    'job_id', 'url', 'thumbnail_url', 'caption', 'taken_at',
+  ];
+
+  function pick(data: Record<string, unknown>, allowed: string[]): Record<string, unknown> {
+    const result: Record<string, unknown> = {};
+    for (const key of allowed) {
+      if (data[key] !== undefined) result[key] = data[key];
+    }
+    return result;
+  }
+
   // Process job changes
   if (changes.jobs) {
     for (const change of changes.jobs) {
       if (change.action === 'update' && change.data) {
+        const normalized = { ...change.data } as Record<string, unknown>;
+        if (normalized.assigned_technician_id === undefined && normalized.assigned_to !== undefined) {
+          normalized.assigned_technician_id = normalized.assigned_to;
+        }
+        const safe = pick(normalized, JOB_ALLOWED_FIELDS);
         await supabase
           .from('jobs')
-          .update({ ...change.data, updated_at: new Date().toISOString() })
+          .update({ ...safe, updated_at: new Date().toISOString() })
           .eq('id', change.id)
           .eq('owner_id', ownerId);
       }
@@ -192,13 +251,15 @@ async function processChanges(
   if (changes.timeEntries) {
     for (const change of changes.timeEntries) {
       if (change.action === 'create' && change.data) {
+        const safe = pick(change.data, TIME_ENTRY_ALLOWED_FIELDS);
         await supabase
           .from('time_entries')
-          .insert({ ...change.data, owner_id: ownerId, id: change.id });
+          .insert({ ...safe, owner_id: ownerId, id: change.id });
       } else if (change.action === 'update' && change.data) {
+        const safe = pick(change.data, TIME_ENTRY_ALLOWED_FIELDS);
         await supabase
           .from('time_entries')
-          .update(change.data)
+          .update(safe)
           .eq('id', change.id)
           .eq('owner_id', ownerId);
       }
@@ -209,9 +270,10 @@ async function processChanges(
   if (changes.photos) {
     for (const change of changes.photos) {
       if (change.action === 'create' && change.data) {
+        const safe = pick(change.data, PHOTO_ALLOWED_FIELDS);
         await supabase
           .from('job_photos')
-          .insert({ ...change.data, owner_id: ownerId, id: change.id });
+          .insert({ ...safe, owner_id: ownerId, id: change.id });
       } else if (change.action === 'delete') {
         await supabase
           .from('job_photos')

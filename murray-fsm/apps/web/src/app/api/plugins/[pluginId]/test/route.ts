@@ -8,10 +8,10 @@ import { pluginRegistry } from '@murray-fsm/services';
 // POST /api/plugins/[pluginId]/test - Test plugin connection
 export async function POST(
   request: NextRequest,
-  { params }: { params: { pluginId: string } }
+  { params }: { params: Promise<{ pluginId: string }> }
 ) {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
@@ -21,13 +21,13 @@ export async function POST(
     const body = await request.json();
     const { config } = body;
 
-    const plugin = pluginRegistry.get(params.pluginId);
+    const plugin = pluginRegistry.get((await params).pluginId);
     if (!plugin) {
       return NextResponse.json({ error: 'Plugin not found' }, { status: 404 });
     }
 
     // Test connection
-    const result = await pluginRegistry.testConnection(params.pluginId, config || {});
+    const result = await pluginRegistry.testConnection((await params).pluginId, config || {});
 
     return NextResponse.json({
       success: result.success,

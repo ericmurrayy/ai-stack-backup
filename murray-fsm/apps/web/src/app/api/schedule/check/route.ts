@@ -25,6 +25,14 @@ import {
  */
 export async function POST(request: NextRequest) {
   try {
+    const supabase = await createClient();
+
+    // Auth check
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await request.json();
     const { proposedStart, proposedEnd, excludeJobId } = body;
 
@@ -32,14 +40,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'proposedStart is required' }, { status: 400 });
     }
 
-    const supabase = createClient();
-
-    // Fetch existing jobs
+    // Fetch existing jobs scoped to user
     const { data: jobs, error } = await supabase
       .from('jobs')
       .select('id, scheduled_start, scheduled_end, title, status')
+      .eq('owner_id', user.id)
       .eq('deleted', false)
-      .not('status', 'in', '("canceled","completed")')
+      .not('status', 'in', '("cancelled","completed")')
       .not('scheduled_start', 'is', null);
 
     if (error) {
@@ -94,20 +101,27 @@ export async function POST(request: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
+    const supabase = await createClient();
+
+    // Auth check
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const searchParams = request.nextUrl.searchParams;
     const date = searchParams.get('date');
     const startDate = searchParams.get('startDate');
     const numDays = parseInt(searchParams.get('numDays') || '7', 10);
     const duration = parseInt(searchParams.get('duration') || '120', 10);
 
-    const supabase = createClient();
-
-    // Fetch existing jobs
+    // Fetch existing jobs scoped to user
     const { data: jobs, error } = await supabase
       .from('jobs')
       .select('id, scheduled_start, scheduled_end, title, status')
+      .eq('owner_id', user.id)
       .eq('deleted', false)
-      .not('status', 'in', '("canceled","completed")')
+      .not('status', 'in', '("cancelled","completed")')
       .not('scheduled_start', 'is', null);
 
     if (error) {

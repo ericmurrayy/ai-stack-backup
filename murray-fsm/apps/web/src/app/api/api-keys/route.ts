@@ -11,11 +11,12 @@ import {
   API_KEY_PRESETS,
   type ApiKeyScope,
 } from '@murray-fsm/services';
+import { logAction } from '@/lib/audit-log';
 
 // GET /api/api-keys - List all API keys
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
@@ -25,6 +26,7 @@ export async function GET(request: NextRequest) {
     const { data: keys, error } = await supabase
       .from('api_keys')
       .select('id, name, key_prefix, scopes, created_at, expires_at, last_used_at, is_active, rate_limit_per_minute, allowed_ips, description')
+      .eq('owner_id', user.id)
       .eq('deleted', false)
       .order('created_at', { ascending: false });
 
@@ -48,7 +50,7 @@ export async function GET(request: NextRequest) {
 // POST /api/api-keys - Create a new API key
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
@@ -74,6 +76,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate scopes
+    if (!Array.isArray(scopes) || scopes.length === 0) {
+      return NextResponse.json(
+        { error: 'scopes must be a non-empty array' },
+        { status: 400 }
+      );
+    }
     const validScopes = Object.keys(API_SCOPE_DESCRIPTIONS) as ApiKeyScope[];
     const invalidScopes = scopes.filter((s: string) => !validScopes.includes(s as ApiKeyScope));
     if (invalidScopes.length > 0) {
@@ -97,6 +105,7 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabase
       .from('api_keys')
       .insert({
+        owner_id: user.id,
         name,
         key_prefix: keyPrefix,
         key_hash: keyHash,
@@ -113,6 +122,17 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) throw error;
+
+    // Audit log: API key creation is security-sensitive
+    logAction(request, {
+      ownerId: user.id,
+      actorId: user.id,
+      actorEmail: user.email,
+      action: 'api_key.created',
+      resourceType: 'api_key',
+      resourceId: data.id,
+      metadata: { name, scopes, expires_at, key_prefix: keyPrefix },
+    });
 
     return NextResponse.json({
       success: true,

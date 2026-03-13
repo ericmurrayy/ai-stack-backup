@@ -4,6 +4,16 @@
 
 import { formatCents, formatDate, formatPhone, formatAddress } from '@murray-fsm/shared';
 
+/** Escape HTML special characters to prevent XSS */
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -118,22 +128,22 @@ export function generateEstimateHTML(
 
       <div class="info-block">
         <div class="info-label">Customer</div>
-        <div class="info-value">${estimate.customer.name}</div>
+        <div class="info-value">${escapeHtml(estimate.customer.name)}</div>
         ${estimate.customer.phone ? `<div class="info-detail">${formatPhone(estimate.customer.phone)}</div>` : ''}
         ${estimate.customer.email ? `<div class="info-detail">${estimate.customer.email}</div>` : ''}
       </div>
 
       <div class="info-block">
         <div class="info-label">Service Location</div>
-        <div class="info-value">${estimate.location.address1}</div>
-        ${estimate.location.address2 ? `<div class="info-detail">${estimate.location.address2}</div>` : ''}
-        <div class="info-detail">${estimate.location.city}, ${estimate.location.state} ${estimate.location.postal_code}</div>
+        <div class="info-value">${escapeHtml(estimate.location.address1)}</div>
+        ${estimate.location.address2 ? `<div class="info-detail">${escapeHtml(estimate.location.address2)}</div>` : ''}
+        <div class="info-detail">${escapeHtml(estimate.location.city)}, ${escapeHtml(estimate.location.state)} ${escapeHtml(estimate.location.postal_code)}</div>
       </div>
     </div>
 
     <div class="job-section">
-      <div class="job-title">${estimate.jobTitle}</div>
-      ${estimate.jobDescription ? `<div class="job-description">${estimate.jobDescription}</div>` : ''}
+      <div class="job-title">${escapeHtml(estimate.jobTitle)}</div>
+      ${estimate.jobDescription ? `<div class="job-description">${escapeHtml(estimate.jobDescription)}</div>` : ''}
     </div>
 
     ${generateLineItemsTable(estimate.lineItems)}
@@ -143,14 +153,14 @@ export function generateEstimateHTML(
     ${estimate.notes ? `
     <div class="notes-section">
       <div class="notes-label">Notes</div>
-      <div class="notes-content">${estimate.notes}</div>
+      <div class="notes-content">${escapeHtml(estimate.notes)}</div>
     </div>
     ` : ''}
 
     ${estimate.terms ? `
     <div class="terms-section">
       <div class="terms-label">Terms & Conditions</div>
-      <div class="terms-content">${estimate.terms}</div>
+      <div class="terms-content">${escapeHtml(estimate.terms)}</div>
     </div>
     ` : ''}
 
@@ -195,16 +205,16 @@ export function generateInvoiceHTML(
 
       <div class="info-block">
         <div class="info-label">Bill To</div>
-        <div class="info-value">${invoice.customer.name}</div>
+        <div class="info-value">${escapeHtml(invoice.customer.name)}</div>
         ${invoice.customer.phone ? `<div class="info-detail">${formatPhone(invoice.customer.phone)}</div>` : ''}
         ${invoice.customer.email ? `<div class="info-detail">${invoice.customer.email}</div>` : ''}
       </div>
 
       <div class="info-block">
         <div class="info-label">Service Location</div>
-        <div class="info-value">${invoice.location.address1}</div>
-        ${invoice.location.address2 ? `<div class="info-detail">${invoice.location.address2}</div>` : ''}
-        <div class="info-detail">${invoice.location.city}, ${invoice.location.state} ${invoice.location.postal_code}</div>
+        <div class="info-value">${escapeHtml(invoice.location.address1)}</div>
+        ${invoice.location.address2 ? `<div class="info-detail">${escapeHtml(invoice.location.address2)}</div>` : ''}
+        <div class="info-detail">${escapeHtml(invoice.location.city)}, ${escapeHtml(invoice.location.state)} ${escapeHtml(invoice.location.postal_code)}</div>
       </div>
     </div>
 
@@ -220,8 +230,8 @@ export function generateInvoiceHTML(
     `}
 
     <div class="job-section">
-      <div class="job-title">${invoice.jobTitle}</div>
-      ${invoice.jobDescription ? `<div class="job-description">${invoice.jobDescription}</div>` : ''}
+      <div class="job-title">${escapeHtml(invoice.jobTitle)}</div>
+      ${invoice.jobDescription ? `<div class="job-description">${escapeHtml(invoice.jobDescription)}</div>` : ''}
     </div>
 
     ${generateLineItemsTable(invoice.lineItems)}
@@ -231,21 +241,21 @@ export function generateInvoiceHTML(
     ${invoice.paymentInstructions ? `
     <div class="payment-section">
       <div class="payment-label">Payment Instructions</div>
-      <div class="payment-content">${invoice.paymentInstructions}</div>
+      <div class="payment-content">${escapeHtml(invoice.paymentInstructions)}</div>
     </div>
     ` : ''}
 
     ${invoice.notes ? `
     <div class="notes-section">
       <div class="notes-label">Notes</div>
-      <div class="notes-content">${invoice.notes}</div>
+      <div class="notes-content">${escapeHtml(invoice.notes)}</div>
     </div>
     ` : ''}
 
     ${invoice.terms ? `
     <div class="terms-section">
       <div class="terms-label">Terms & Conditions</div>
-      <div class="terms-content">${invoice.terms}</div>
+      <div class="terms-content">${escapeHtml(invoice.terms)}</div>
     </div>
     ` : ''}
 
@@ -264,15 +274,15 @@ function generateHeader(business: BusinessInfo, docType: string, docNumber: stri
   return `
     <div class="header">
       <div class="business-info">
-        ${business.logo ? `<img src="${business.logo}" alt="${business.name}" class="logo" />` : ''}
-        <div class="business-name">${business.name}</div>
+        ${business.logo ? `<img src="${business.logo}" alt="${escapeHtml(business.name)}" class="logo" />` : ''}
+        <div class="business-name">${escapeHtml(business.name)}</div>
         <div class="business-details">
-          ${business.address1}${business.address2 ? `, ${business.address2}` : ''}<br>
-          ${business.city}, ${business.state} ${business.postalCode}<br>
+          ${escapeHtml(business.address1)}${business.address2 ? `, ${escapeHtml(business.address2)}` : ''}<br>
+          ${escapeHtml(business.city)}, ${escapeHtml(business.state)} ${escapeHtml(business.postalCode)}<br>
           ${formatPhone(business.phone)}
           ${business.email ? ` | ${business.email}` : ''}
-          ${business.website ? `<br>${business.website}` : ''}
-          ${business.licenseNumber ? `<br>License: ${business.licenseNumber}` : ''}
+          ${business.website ? `<br>${escapeHtml(business.website)}` : ''}
+          ${business.licenseNumber ? `<br>License: ${escapeHtml(business.licenseNumber)}` : ''}
         </div>
       </div>
       <div class="doc-info">
@@ -286,7 +296,7 @@ function generateHeader(business: BusinessInfo, docType: string, docNumber: stri
 function generateLineItemsTable(lineItems: LineItemData[]): string {
   const rows = lineItems.map(item => `
     <tr>
-      <td class="item-desc">${item.description}</td>
+      <td class="item-desc">${escapeHtml(item.description)}</td>
       <td class="item-qty">${item.quantity}</td>
       <td class="item-price">${formatCents(item.unit_price_cents)}</td>
       <td class="item-total">${formatCents(item.total_cents)}</td>
@@ -354,7 +364,7 @@ function generateFooter(business: BusinessInfo): string {
   return `
     <div class="footer">
       <div class="footer-text">Thank you for your business!</div>
-      <div class="footer-contact">${business.name} | ${formatPhone(business.phone)} | ${business.email}</div>
+      <div class="footer-contact">${escapeHtml(business.name)} | ${formatPhone(business.phone)} | ${business.email}</div>
     </div>
   `;
 }

@@ -69,7 +69,7 @@ describe('detectScheduleConflicts', () => {
       {
         id: '1',
         scheduled_start: new Date(2025, 5, 12, 9, 30, 0).toISOString(),
-        status: 'canceled',
+        status: 'cancelled',
         title: 'Canceled Job',
       },
     ];
@@ -261,7 +261,7 @@ describe('getAvailableSlots', () => {
         id: '1',
         scheduled_start: new Date(2025, 5, 9, 10, 0, 0).toISOString(),
         scheduled_end: new Date(2025, 5, 9, 12, 0, 0).toISOString(),
-        status: 'canceled',
+        status: 'cancelled',
       },
     ];
     const slotsWithCanceled = getAvailableSlots(

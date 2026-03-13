@@ -1,9 +1,11 @@
 // Murray's FSM - Invoice PDF API Route
 // =====================================
+// Returns PDF by default, HTML with ?format=html
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { generateInvoiceHTML, type InvoiceData, type BusinessInfo } from '@murray-fsm/services';
+import { renderInvoicePdf } from '@/lib/pdf-renderer';
 
 // Business info - would normally come from config/database
 const BUSINESS_INFO: BusinessInfo = {
@@ -20,12 +22,18 @@ const BUSINESS_INFO: BusinessInfo = {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { jobId: string } }
+  { params }: { params: Promise<{ jobId: string }> }
 ) {
-  const { jobId } = params;
+  const { jobId } = await params;
 
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
+
+    // Auth check — require logged-in user
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
 
     // Fetch job with related data
     const { data: job, error: jobError } = await supabase
@@ -93,24 +101,30 @@ export async function GET(
       paymentInstructions: 'Pay online via the link in this email, or call us to pay by phone.',
     };
 
-    // Generate HTML
-    const html = generateInvoiceHTML(BUSINESS_INFO, invoiceData);
-
-    // Return HTML or JSON based on format parameter
-    const format = request.nextUrl.searchParams.get('format') || 'html';
+    // Determine output format: pdf (default) or html
+    const format = request.nextUrl.searchParams.get('format') || 'pdf';
 
     if (format === 'html') {
+      // Return rendered HTML (existing behavior preserved)
+      const html = generateInvoiceHTML(BUSINESS_INFO, invoiceData);
       return new NextResponse(html, {
         headers: {
-          'Content-Type': 'text/html',
+          'Content-Type': 'text/html; charset=utf-8',
         },
       });
     }
 
-    return NextResponse.json({
-      message: 'PDF generation requires server-side rendering service',
-      html,
-      downloadUrl: `/api/pdf/invoice/${jobId}?format=html`,
+    // Default: generate PDF
+    const pdfBytes = renderInvoicePdf(BUSINESS_INFO, invoiceData);
+    const filename = `Invoice-${invoiceData.invoiceNumber}.pdf`;
+
+    return new NextResponse(Buffer.from(pdfBytes), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Disposition': `inline; filename="${filename}"`,
+        'Cache-Control': 'private, no-cache, no-store, must-revalidate',
+      },
     });
 
   } catch (error) {

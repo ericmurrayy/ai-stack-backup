@@ -199,14 +199,14 @@ export function findAvailableTechnicians(
   const dayKey = DAY_KEYS[date.getDay()];
   if (!dayKey) return [];
 
-  // Build a set of technician IDs that are booked on this date
-  const bookedTechIds = new Set<string>();
+  // Count jobs per technician on this date
+  const techJobCounts = new Map<string, number>();
   const dayStart = startOfDay(date);
   const dayEnd = endOfDay(date);
 
   for (const job of existingJobs) {
     if (
-      job.status === 'canceled' ||
+      job.status === 'cancelled' ||
       job.status === 'completed' ||
       !job.scheduled_start ||
       !job.assigned_technician_id
@@ -216,15 +216,16 @@ export function findAvailableTechnicians(
 
     const jobDate = parseISO(job.scheduled_start);
     if (isWithinInterval(jobDate, { start: dayStart, end: dayEnd })) {
-      // Mark as booked -- they could still be available if they have
-      // capacity, but for simple filtering we exclude fully-booked techs.
-      // Count how many jobs they have this day
       const techId = job.assigned_technician_id;
-      const currentCount = (bookedTechIds.has(techId) ? 2 : 0) + 1;
-      if (currentCount > 1) {
-        // More than one job already -- consider them booked
-        bookedTechIds.add(techId);
-      }
+      techJobCounts.set(techId, (techJobCounts.get(techId) || 0) + 1);
+    }
+  }
+
+  // Technicians with 2+ jobs on this day are considered fully booked
+  const bookedTechIds = new Set<string>();
+  for (const [techId, count] of Array.from(techJobCounts)) {
+    if (count >= 2) {
+      bookedTechIds.add(techId);
     }
   }
 

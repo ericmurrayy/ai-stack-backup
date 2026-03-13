@@ -26,6 +26,13 @@ import {
   FileText,
   Repeat,
   FileCheck,
+  LayoutGrid,
+  Gift,
+  TrendingUp,
+  Trophy,
+  Receipt,
+  Timer,
+  Activity,
 } from 'lucide-react';
 
 const mainNavigation = [
@@ -33,6 +40,7 @@ const mainNavigation = [
   { name: 'Pipeline', href: '/pipeline', icon: Kanban },
   { name: 'Customers', href: '/customers', icon: Users },
   { name: 'Calendar', href: '/calendar', icon: Calendar },
+  { name: 'Dispatch', href: '/dispatch', icon: LayoutGrid },
   { name: 'Approvals', href: '/approvals', icon: CheckCircle },
 ];
 
@@ -43,14 +51,21 @@ const communicationNavigation = [
 
 const businessNavigation = [
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },
+  { name: 'Reports', href: '/reports', icon: TrendingUp },
+  { name: 'Invoices', href: '/invoices', icon: Receipt },
   { name: 'Payments', href: '/payments', icon: CreditCard },
   { name: 'Estimates', href: '/estimates', icon: FileText },
   { name: 'Reviews', href: '/reviews', icon: Star },
   { name: 'Marketing', href: '/marketing', icon: Megaphone },
+  { name: 'Referrals', href: '/referrals', icon: Gift },
 ];
 
 const operationsNavigation = [
   { name: 'Team', href: '/team', icon: UserCog },
+  { name: 'Performance', href: '/performance', icon: Trophy },
+  { name: 'Time Tracking', href: '/timetracking', icon: Timer },
+  { name: 'Automations', href: '/automations', icon: Bot },
+  { name: 'Activity', href: '/activity', icon: Activity },
   { name: 'Inventory', href: '/inventory', icon: Package },
   { name: 'Recurring', href: '/recurring', icon: Repeat },
   { name: 'Agreements', href: '/agreements', icon: FileCheck },

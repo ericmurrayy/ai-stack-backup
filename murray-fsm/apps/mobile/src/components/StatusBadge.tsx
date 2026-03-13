@@ -11,10 +11,13 @@ interface StatusBadgeProps {
 }
 
 const statusConfig: Record<JobStatus, { bg: string; text: string; label: string }> = {
-  scheduled: { bg: '#dbeafe', text: '#1e40af', label: 'Scheduled' },
+  new: { bg: '#dbeafe', text: '#2563eb', label: 'New' },
+  contacted: { bg: '#e0e7ff', text: '#4338ca', label: 'Contacted' },
+  scheduled: { bg: '#cffafe', text: '#0891b2', label: 'Scheduled' },
   in_progress: { bg: '#fef3c7', text: '#d97706', label: 'In Progress' },
   completed: { bg: '#dcfce7', text: '#16a34a', label: 'Completed' },
-  canceled: { bg: '#fee2e2', text: '#dc2626', label: 'Canceled' },
+  cancelled: { bg: '#fee2e2', text: '#dc2626', label: 'Cancelled' },
+  spam: { bg: '#f3f4f6', text: '#6b7280', label: 'Spam' },
 };
 
 export const StatusBadge: React.FC<StatusBadgeProps> = ({

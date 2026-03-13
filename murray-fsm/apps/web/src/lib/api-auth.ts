@@ -3,13 +3,25 @@
 // Validates API keys and enforces rate limits
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { hashApiKey, hasScope, type ApiKeyScope } from '@murray-fsm/services';
+import {
+  checkRateLimit,
+  rateLimitResponse,
+  applyRateLimitHeaders,
+  type RateLimitResult,
+} from '@/lib/rate-limiter';
+
+/** Default rate limit when API key has no custom limit configured */
+const DEFAULT_RATE_LIMIT_PER_MINUTE = 100;
 
 export interface ApiAuthResult {
   authenticated: boolean;
+  apiKeyId?: string;
   ownerId?: string;
   scopes?: ApiKeyScope[];
+  /** Per-minute rate limit for this API key (from DB or default) */
+  rateLimitPerMinute?: number;
   error?: string;
   statusCode?: number;
 }
@@ -44,7 +56,7 @@ export async function authenticateApiRequest(
   }
 
   try {
-    const supabase = createClient();
+    const supabase = createAdminClient();
     const keyHash = hashApiKey(token);
 
     // Lookup API key by hash
@@ -96,8 +108,10 @@ export async function authenticateApiRequest(
 
     return {
       authenticated: true,
+      apiKeyId: apiKey.id,
       ownerId: apiKey.owner_id,
       scopes: apiKey.scopes as ApiKeyScope[],
+      rateLimitPerMinute: apiKey.rate_limit_per_minute ?? DEFAULT_RATE_LIMIT_PER_MINUTE,
     };
   } catch (error) {
     console.error('API authentication error:', error);
@@ -110,12 +124,14 @@ export async function authenticateApiRequest(
 }
 
 /**
- * Middleware wrapper for API routes requiring authentication
+ * Middleware wrapper for API routes requiring authentication.
+ * Now includes rate limiting -- checks rate limit after successful auth
+ * and attaches X-RateLimit-* headers to all responses.
  */
 export function withApiAuth(
   handler: (
     request: NextRequest,
-    context: { params: Record<string, string>; auth: ApiAuthResult }
+    context: { params: Record<string, string>; auth: ApiAuthResult; rateLimit: RateLimitResult }
   ) => Promise<NextResponse>,
   options?: {
     requiredScopes?: ApiKeyScope[];
@@ -134,6 +150,16 @@ export function withApiAuth(
       );
     }
 
+    // Enforce rate limit using the API key's configured limit
+    const rateLimitResult = checkRateLimit(auth.apiKeyId!, {
+      maxRequests: auth.rateLimitPerMinute ?? DEFAULT_RATE_LIMIT_PER_MINUTE,
+      windowMs: 60_000,
+    });
+
+    if (!rateLimitResult.allowed) {
+      return rateLimitResponse(rateLimitResult);
+    }
+
     // Check required scopes
     if (options?.requiredScopes && auth.scopes) {
       const hasAllScopes = options.requiredScopes.every(scope =>
@@ -141,7 +167,7 @@ export function withApiAuth(
       );
 
       if (!hasAllScopes) {
-        return NextResponse.json(
+        const forbidden = NextResponse.json(
           {
             error: 'Insufficient permissions',
             code: 'FORBIDDEN',
@@ -149,16 +175,14 @@ export function withApiAuth(
           },
           { status: 403 }
         );
+        return applyRateLimitHeaders(forbidden, rateLimitResult);
       }
     }
 
-    // Add rate limit headers
-    const response = await handler(request, { ...context, auth });
+    const response = await handler(request, { ...context, auth, rateLimit: rateLimitResult });
 
-    response.headers.set('X-RateLimit-Limit', '100');
-    response.headers.set('X-RateLimit-Remaining', '99');
-
-    return response;
+    // Attach rate limit headers to all successful responses
+    return applyRateLimitHeaders(response, rateLimitResult);
   };
 }
 
@@ -175,7 +199,7 @@ export async function logApiUsage(
   request: NextRequest
 ): Promise<void> {
   try {
-    const supabase = createClient();
+    const supabase = createAdminClient();
 
     await supabase.from('api_key_usage').insert({
       api_key_id: apiKeyId,

@@ -121,7 +121,7 @@ export function detectScheduleConflicts(
 
   for (const job of existingJobs) {
     // Skip non-active jobs
-    if (job.status === 'canceled' || job.status === 'completed') {
+    if (job.status === 'cancelled' || job.status === 'completed') {
       continue;
     }
 
@@ -219,7 +219,7 @@ export function getAvailableSlots(
   // Filter jobs for this day
   const dayJobs = existingJobs
     .filter((job) => {
-      if (!job.scheduled_start || job.status === 'canceled' || job.status === 'completed') {
+      if (!job.scheduled_start || job.status === 'cancelled' || job.status === 'completed') {
         return false;
       }
       const jobDate = parseISO(job.scheduled_start);

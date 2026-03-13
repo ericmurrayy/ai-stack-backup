@@ -117,7 +117,7 @@ function SectionHeading({
 // ---------------------------------------------------------------------------
 
 async function getAnalyticsData() {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   // Date boundaries -------------------------------------------------------
   const now = new Date();
@@ -756,7 +756,7 @@ export default async function AnalyticsPage() {
                       <div className="font-medium text-slate-900">{tech.name}</div>
                       {tech.specialties.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1">
-                          {tech.specialties.slice(0, 3).map((s) => (
+                          {tech.specialties.slice(0, 3).map((s: string) => (
                             <Badge key={s} variant="default" className="text-xs capitalize">
                               {s}
                             </Badge>

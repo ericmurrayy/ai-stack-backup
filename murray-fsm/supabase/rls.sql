@@ -5,10 +5,16 @@
 -- Last synced: 2026-03-10
 --
 -- DESIGN PHILOSOPHY:
---   This is an internal business application. Authenticated users (the
---   business owner and their team) get full CRUD on every table. The
---   owner_id column is NOT used for row-level filtering because a single
---   business operates under one Supabase project.
+--   This is an internal business application. Most tables grant full CRUD
+--   to authenticated users via USING(true).
+--
+--   SENSITIVE TABLES use owner_id = auth.uid() filtering:
+--     - api_keys           : owner-only (contains key hashes & scopes)
+--     - webhook_endpoints  : owner-only (contains webhook secrets)
+--     - business_settings  : owner-only for authenticated; anon SELECT kept
+--     - profiles           : owner-only (id = auth.uid() OR owner_id = auth.uid())
+--
+--   Edge Functions using the service_role key bypass RLS entirely.
 --
 --   Exceptions for public/anon access:
 --     - business_settings : anon SELECT (booking widget reads biz info)
@@ -91,6 +97,10 @@ DROP POLICY IF EXISTS "profiles_authenticated_select"     ON profiles;
 DROP POLICY IF EXISTS "profiles_authenticated_insert"     ON profiles;
 DROP POLICY IF EXISTS "profiles_authenticated_update"     ON profiles;
 DROP POLICY IF EXISTS "profiles_authenticated_delete"     ON profiles;
+DROP POLICY IF EXISTS "profiles_owner_select"             ON profiles;
+DROP POLICY IF EXISTS "profiles_owner_insert"             ON profiles;
+DROP POLICY IF EXISTS "profiles_owner_update"             ON profiles;
+DROP POLICY IF EXISTS "profiles_owner_delete"             ON profiles;
 
 -- customers
 DROP POLICY IF EXISTS "Users can view own customers"      ON customers;
@@ -139,6 +149,7 @@ DROP POLICY IF EXISTS "jobs_authenticated_insert"         ON jobs;
 DROP POLICY IF EXISTS "jobs_authenticated_update"         ON jobs;
 DROP POLICY IF EXISTS "jobs_authenticated_delete"         ON jobs;
 DROP POLICY IF EXISTS "jobs_anon_insert"                  ON jobs;
+DROP POLICY IF EXISTS "jobs_anon_insert_restricted"       ON jobs;
 
 -- interactions
 DROP POLICY IF EXISTS "Service role full access"          ON interactions;
@@ -338,6 +349,10 @@ DROP POLICY IF EXISTS "business_settings_authenticated_insert" ON business_setti
 DROP POLICY IF EXISTS "business_settings_authenticated_update" ON business_settings;
 DROP POLICY IF EXISTS "business_settings_authenticated_delete" ON business_settings;
 DROP POLICY IF EXISTS "business_settings_anon_select"          ON business_settings;
+DROP POLICY IF EXISTS "business_settings_owner_select"         ON business_settings;
+DROP POLICY IF EXISTS "business_settings_owner_insert"         ON business_settings;
+DROP POLICY IF EXISTS "business_settings_owner_update"         ON business_settings;
+DROP POLICY IF EXISTS "business_settings_owner_delete"         ON business_settings;
 
 -- tags
 DROP POLICY IF EXISTS "tags_select"                       ON tags;
@@ -358,6 +373,10 @@ DROP POLICY IF EXISTS "api_keys_authenticated_select"     ON api_keys;
 DROP POLICY IF EXISTS "api_keys_authenticated_insert"     ON api_keys;
 DROP POLICY IF EXISTS "api_keys_authenticated_update"     ON api_keys;
 DROP POLICY IF EXISTS "api_keys_authenticated_delete"     ON api_keys;
+DROP POLICY IF EXISTS "api_keys_owner_select"             ON api_keys;
+DROP POLICY IF EXISTS "api_keys_owner_insert"             ON api_keys;
+DROP POLICY IF EXISTS "api_keys_owner_update"             ON api_keys;
+DROP POLICY IF EXISTS "api_keys_owner_delete"             ON api_keys;
 
 -- webhook_endpoints
 DROP POLICY IF EXISTS "Users can view own webhook_endpoints"   ON webhook_endpoints;
@@ -368,6 +387,10 @@ DROP POLICY IF EXISTS "webhook_endpoints_authenticated_select" ON webhook_endpoi
 DROP POLICY IF EXISTS "webhook_endpoints_authenticated_insert" ON webhook_endpoints;
 DROP POLICY IF EXISTS "webhook_endpoints_authenticated_update" ON webhook_endpoints;
 DROP POLICY IF EXISTS "webhook_endpoints_authenticated_delete" ON webhook_endpoints;
+DROP POLICY IF EXISTS "webhook_endpoints_owner_select"         ON webhook_endpoints;
+DROP POLICY IF EXISTS "webhook_endpoints_owner_insert"         ON webhook_endpoints;
+DROP POLICY IF EXISTS "webhook_endpoints_owner_update"         ON webhook_endpoints;
+DROP POLICY IF EXISTS "webhook_endpoints_owner_delete"         ON webhook_endpoints;
 
 -- installed_plugins
 DROP POLICY IF EXISTS "Users can view own installed_plugins"   ON installed_plugins;
@@ -384,28 +407,30 @@ DROP POLICY IF EXISTS "installed_plugins_authenticated_delete" ON installed_plug
 -- SECTION 1: PROFILES
 -- ============================================================================
 -- User profile table. PK is the auth user's UUID.
--- Authenticated users get full CRUD access.
+-- RESTRICTED: Owner-only access. A user can see their own profile row
+-- (id = auth.uid()) or any profile they own (owner_id = auth.uid()).
+-- INSERT/UPDATE/DELETE restricted to rows the user owns.
 
-CREATE POLICY "profiles_authenticated_select"
+CREATE POLICY "profiles_owner_select"
     ON profiles FOR SELECT
     TO authenticated
-    USING (true);
+    USING (id = auth.uid() OR owner_id = auth.uid());
 
-CREATE POLICY "profiles_authenticated_insert"
+CREATE POLICY "profiles_owner_insert"
     ON profiles FOR INSERT
     TO authenticated
-    WITH CHECK (true);
+    WITH CHECK (owner_id = auth.uid());
 
-CREATE POLICY "profiles_authenticated_update"
+CREATE POLICY "profiles_owner_update"
     ON profiles FOR UPDATE
     TO authenticated
-    USING (true)
-    WITH CHECK (true);
+    USING (owner_id = auth.uid())
+    WITH CHECK (owner_id = auth.uid());
 
-CREATE POLICY "profiles_authenticated_delete"
+CREATE POLICY "profiles_owner_delete"
     ON profiles FOR DELETE
     TO authenticated
-    USING (true);
+    USING (owner_id = auth.uid());
 
 
 -- ============================================================================
@@ -546,11 +571,23 @@ CREATE POLICY "jobs_authenticated_delete"
     USING (true);
 
 -- Anon access: booking widget can create new jobs without authentication.
--- The widget collects customer info + service request and inserts a job row.
-CREATE POLICY "jobs_anon_insert"
+-- RESTRICTED: only allows setting booking-relevant fields; forces safe defaults.
+CREATE POLICY "jobs_anon_insert_restricted"
     ON jobs FOR INSERT
     TO anon
-    WITH CHECK (true);
+    WITH CHECK (
+        phone_number IS NOT NULL
+        AND phone_e164 IS NOT NULL
+        AND status = 'new'
+        AND assigned_technician_id IS NULL
+        AND scheduled_at IS NULL
+        AND is_spam = FALSE
+        AND priority = 'normal'
+        AND closed_at IS NULL
+        AND source_event_id IS NULL
+        AND estimate_id IS NULL
+        AND recurring_job_id IS NULL
+    );
 
 
 -- ============================================================================
@@ -1072,29 +1109,29 @@ CREATE POLICY "action_queue_authenticated_delete"
 -- SECTION 26: BUSINESS_SETTINGS  (special: anon SELECT for booking widget)
 -- ============================================================================
 -- Per-owner business configuration.
--- Authenticated users: full CRUD.
--- Anon users: SELECT only (public booking widget reads business hours, name, etc.).
+-- RESTRICTED: Owner-only for authenticated users.
+-- Anon SELECT preserved for public booking widget.
 
-CREATE POLICY "business_settings_authenticated_select"
+CREATE POLICY "business_settings_owner_select"
     ON business_settings FOR SELECT
     TO authenticated
-    USING (true);
+    USING (owner_id = auth.uid());
 
-CREATE POLICY "business_settings_authenticated_insert"
+CREATE POLICY "business_settings_owner_insert"
     ON business_settings FOR INSERT
     TO authenticated
-    WITH CHECK (true);
+    WITH CHECK (owner_id = auth.uid());
 
-CREATE POLICY "business_settings_authenticated_update"
+CREATE POLICY "business_settings_owner_update"
     ON business_settings FOR UPDATE
     TO authenticated
-    USING (true)
-    WITH CHECK (true);
+    USING (owner_id = auth.uid())
+    WITH CHECK (owner_id = auth.uid());
 
-CREATE POLICY "business_settings_authenticated_delete"
+CREATE POLICY "business_settings_owner_delete"
     ON business_settings FOR DELETE
     TO authenticated
-    USING (true);
+    USING (owner_id = auth.uid());
 
 -- Anon read access: booking widget and public-facing pages need to read
 -- business name, phone, hours, etc. Sensitive fields are excluded at the
@@ -1135,55 +1172,57 @@ CREATE POLICY "tags_authenticated_delete"
 -- ============================================================================
 -- SECTION 28: API_KEYS
 -- ============================================================================
--- API access management. Full CRUD for authenticated users.
+-- RESTRICTED: Owner-only access. API keys contain sensitive credentials
+-- (key hashes, scopes, rate limits). Only the owner should have access.
 
-CREATE POLICY "api_keys_authenticated_select"
+CREATE POLICY "api_keys_owner_select"
     ON api_keys FOR SELECT
     TO authenticated
-    USING (true);
+    USING (owner_id = auth.uid());
 
-CREATE POLICY "api_keys_authenticated_insert"
+CREATE POLICY "api_keys_owner_insert"
     ON api_keys FOR INSERT
     TO authenticated
-    WITH CHECK (true);
+    WITH CHECK (owner_id = auth.uid());
 
-CREATE POLICY "api_keys_authenticated_update"
+CREATE POLICY "api_keys_owner_update"
     ON api_keys FOR UPDATE
     TO authenticated
-    USING (true)
-    WITH CHECK (true);
+    USING (owner_id = auth.uid())
+    WITH CHECK (owner_id = auth.uid());
 
-CREATE POLICY "api_keys_authenticated_delete"
+CREATE POLICY "api_keys_owner_delete"
     ON api_keys FOR DELETE
     TO authenticated
-    USING (true);
+    USING (owner_id = auth.uid());
 
 
 -- ============================================================================
 -- SECTION 29: WEBHOOK_ENDPOINTS
 -- ============================================================================
--- Outgoing webhook endpoints. Full CRUD for authenticated users.
+-- RESTRICTED: Owner-only access. Webhook endpoints contain secrets used
+-- for HMAC signing. Exposing these would allow forging webhook payloads.
 
-CREATE POLICY "webhook_endpoints_authenticated_select"
+CREATE POLICY "webhook_endpoints_owner_select"
     ON webhook_endpoints FOR SELECT
     TO authenticated
-    USING (true);
+    USING (owner_id = auth.uid());
 
-CREATE POLICY "webhook_endpoints_authenticated_insert"
+CREATE POLICY "webhook_endpoints_owner_insert"
     ON webhook_endpoints FOR INSERT
     TO authenticated
-    WITH CHECK (true);
+    WITH CHECK (owner_id = auth.uid());
 
-CREATE POLICY "webhook_endpoints_authenticated_update"
+CREATE POLICY "webhook_endpoints_owner_update"
     ON webhook_endpoints FOR UPDATE
     TO authenticated
-    USING (true)
-    WITH CHECK (true);
+    USING (owner_id = auth.uid())
+    WITH CHECK (owner_id = auth.uid());
 
-CREATE POLICY "webhook_endpoints_authenticated_delete"
+CREATE POLICY "webhook_endpoints_owner_delete"
     ON webhook_endpoints FOR DELETE
     TO authenticated
-    USING (true);
+    USING (owner_id = auth.uid());
 
 
 -- ============================================================================
@@ -1263,33 +1302,293 @@ CREATE POLICY "installed_plugins_authenticated_delete"
 
 
 -- ============================================================================
+-- SECTION 32: INVOICES  (billing table)
+-- ============================================================================
+
+ALTER TABLE invoices ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "invoices_authenticated_select" ON invoices;
+DROP POLICY IF EXISTS "invoices_authenticated_insert" ON invoices;
+DROP POLICY IF EXISTS "invoices_authenticated_update" ON invoices;
+DROP POLICY IF EXISTS "invoices_authenticated_delete" ON invoices;
+
+CREATE POLICY "invoices_authenticated_select"
+    ON invoices FOR SELECT TO authenticated USING (true);
+CREATE POLICY "invoices_authenticated_insert"
+    ON invoices FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "invoices_authenticated_update"
+    ON invoices FOR UPDATE TO authenticated USING (true);
+CREATE POLICY "invoices_authenticated_delete"
+    ON invoices FOR DELETE TO authenticated USING (true);
+
+
+-- ============================================================================
+-- SECTION 33: INVOICE_ITEMS  (billing line items)
+-- ============================================================================
+
+ALTER TABLE invoice_items ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "invoice_items_authenticated_select" ON invoice_items;
+DROP POLICY IF EXISTS "invoice_items_authenticated_insert" ON invoice_items;
+DROP POLICY IF EXISTS "invoice_items_authenticated_update" ON invoice_items;
+DROP POLICY IF EXISTS "invoice_items_authenticated_delete" ON invoice_items;
+
+CREATE POLICY "invoice_items_authenticated_select"
+    ON invoice_items FOR SELECT TO authenticated USING (true);
+CREATE POLICY "invoice_items_authenticated_insert"
+    ON invoice_items FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "invoice_items_authenticated_update"
+    ON invoice_items FOR UPDATE TO authenticated USING (true);
+CREATE POLICY "invoice_items_authenticated_delete"
+    ON invoice_items FOR DELETE TO authenticated USING (true);
+
+
+-- ============================================================================
+-- SECTION 34: PAYMENTS  (payment records)
+-- ============================================================================
+
+ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "payments_authenticated_select" ON payments;
+DROP POLICY IF EXISTS "payments_authenticated_insert" ON payments;
+DROP POLICY IF EXISTS "payments_authenticated_update" ON payments;
+DROP POLICY IF EXISTS "payments_authenticated_delete" ON payments;
+
+CREATE POLICY "payments_authenticated_select"
+    ON payments FOR SELECT TO authenticated USING (true);
+CREATE POLICY "payments_authenticated_insert"
+    ON payments FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "payments_authenticated_update"
+    ON payments FOR UPDATE TO authenticated USING (true);
+CREATE POLICY "payments_authenticated_delete"
+    ON payments FOR DELETE TO authenticated USING (true);
+
+
+-- ============================================================================
+-- SECTION 35: HARDENING OVERRIDES (2026-03-12)
+-- ============================================================================
+-- Replace permissive authenticated policies on core business tables with
+-- owner-scoped policies. This mirrors migration:
+--   20260312100000_harden_multitenant_rls.sql
+
+-- customers
+DROP POLICY IF EXISTS "customers_authenticated_select" ON customers;
+DROP POLICY IF EXISTS "customers_authenticated_insert" ON customers;
+DROP POLICY IF EXISTS "customers_authenticated_update" ON customers;
+DROP POLICY IF EXISTS "customers_authenticated_delete" ON customers;
+DROP POLICY IF EXISTS "customers_owner_select" ON customers;
+DROP POLICY IF EXISTS "customers_owner_insert" ON customers;
+DROP POLICY IF EXISTS "customers_owner_update" ON customers;
+DROP POLICY IF EXISTS "customers_owner_delete" ON customers;
+CREATE POLICY "customers_owner_select"
+    ON customers FOR SELECT TO authenticated USING (owner_id = auth.uid());
+CREATE POLICY "customers_owner_insert"
+    ON customers FOR INSERT TO authenticated WITH CHECK (owner_id = auth.uid());
+CREATE POLICY "customers_owner_update"
+    ON customers FOR UPDATE TO authenticated USING (owner_id = auth.uid()) WITH CHECK (owner_id = auth.uid());
+CREATE POLICY "customers_owner_delete"
+    ON customers FOR DELETE TO authenticated USING (owner_id = auth.uid());
+
+-- locations
+DROP POLICY IF EXISTS "locations_authenticated_select" ON locations;
+DROP POLICY IF EXISTS "locations_authenticated_insert" ON locations;
+DROP POLICY IF EXISTS "locations_authenticated_update" ON locations;
+DROP POLICY IF EXISTS "locations_authenticated_delete" ON locations;
+DROP POLICY IF EXISTS "locations_owner_select" ON locations;
+DROP POLICY IF EXISTS "locations_owner_insert" ON locations;
+DROP POLICY IF EXISTS "locations_owner_update" ON locations;
+DROP POLICY IF EXISTS "locations_owner_delete" ON locations;
+CREATE POLICY "locations_owner_select"
+    ON locations FOR SELECT TO authenticated USING (owner_id = auth.uid());
+CREATE POLICY "locations_owner_insert"
+    ON locations FOR INSERT TO authenticated WITH CHECK (owner_id = auth.uid());
+CREATE POLICY "locations_owner_update"
+    ON locations FOR UPDATE TO authenticated USING (owner_id = auth.uid()) WITH CHECK (owner_id = auth.uid());
+CREATE POLICY "locations_owner_delete"
+    ON locations FOR DELETE TO authenticated USING (owner_id = auth.uid());
+
+-- jobs (keep restricted anon insert policy)
+DROP POLICY IF EXISTS "jobs_authenticated_select" ON jobs;
+DROP POLICY IF EXISTS "jobs_authenticated_insert" ON jobs;
+DROP POLICY IF EXISTS "jobs_authenticated_update" ON jobs;
+DROP POLICY IF EXISTS "jobs_authenticated_delete" ON jobs;
+DROP POLICY IF EXISTS "jobs_owner_select" ON jobs;
+DROP POLICY IF EXISTS "jobs_owner_insert" ON jobs;
+DROP POLICY IF EXISTS "jobs_owner_update" ON jobs;
+DROP POLICY IF EXISTS "jobs_owner_delete" ON jobs;
+CREATE POLICY "jobs_owner_select"
+    ON jobs FOR SELECT TO authenticated USING (owner_id = auth.uid());
+CREATE POLICY "jobs_owner_insert"
+    ON jobs FOR INSERT TO authenticated WITH CHECK (owner_id = auth.uid());
+CREATE POLICY "jobs_owner_update"
+    ON jobs FOR UPDATE TO authenticated USING (owner_id = auth.uid()) WITH CHECK (owner_id = auth.uid());
+CREATE POLICY "jobs_owner_delete"
+    ON jobs FOR DELETE TO authenticated USING (owner_id = auth.uid());
+DROP POLICY IF EXISTS "jobs_anon_insert" ON jobs;
+DROP POLICY IF EXISTS "jobs_anon_insert_restricted" ON jobs;
+CREATE POLICY "jobs_anon_insert_restricted"
+    ON jobs FOR INSERT TO anon
+    WITH CHECK (
+        phone_number IS NOT NULL
+        AND phone_e164 IS NOT NULL
+        AND status = 'new'
+        AND assigned_technician_id IS NULL
+        AND scheduled_at IS NULL
+        AND is_spam = FALSE
+        AND priority = 'normal'
+        AND closed_at IS NULL
+        AND source_event_id IS NULL
+        AND estimate_id IS NULL
+        AND recurring_job_id IS NULL
+    );
+
+-- estimates
+DROP POLICY IF EXISTS "estimates_select" ON estimates;
+DROP POLICY IF EXISTS "estimates_insert" ON estimates;
+DROP POLICY IF EXISTS "estimates_update" ON estimates;
+DROP POLICY IF EXISTS "estimates_delete" ON estimates;
+DROP POLICY IF EXISTS "estimates_authenticated_select" ON estimates;
+DROP POLICY IF EXISTS "estimates_authenticated_insert" ON estimates;
+DROP POLICY IF EXISTS "estimates_authenticated_update" ON estimates;
+DROP POLICY IF EXISTS "estimates_authenticated_delete" ON estimates;
+DROP POLICY IF EXISTS "estimates_owner_select" ON estimates;
+DROP POLICY IF EXISTS "estimates_owner_insert" ON estimates;
+DROP POLICY IF EXISTS "estimates_owner_update" ON estimates;
+DROP POLICY IF EXISTS "estimates_owner_delete" ON estimates;
+CREATE POLICY "estimates_owner_select"
+    ON estimates FOR SELECT TO authenticated USING (owner_id = auth.uid());
+CREATE POLICY "estimates_owner_insert"
+    ON estimates FOR INSERT TO authenticated WITH CHECK (owner_id = auth.uid());
+CREATE POLICY "estimates_owner_update"
+    ON estimates FOR UPDATE TO authenticated USING (owner_id = auth.uid()) WITH CHECK (owner_id = auth.uid());
+CREATE POLICY "estimates_owner_delete"
+    ON estimates FOR DELETE TO authenticated USING (owner_id = auth.uid());
+
+-- recurring_jobs
+DROP POLICY IF EXISTS "recurring_jobs_select" ON recurring_jobs;
+DROP POLICY IF EXISTS "recurring_jobs_insert" ON recurring_jobs;
+DROP POLICY IF EXISTS "recurring_jobs_update" ON recurring_jobs;
+DROP POLICY IF EXISTS "recurring_jobs_delete" ON recurring_jobs;
+DROP POLICY IF EXISTS "recurring_jobs_authenticated_select" ON recurring_jobs;
+DROP POLICY IF EXISTS "recurring_jobs_authenticated_insert" ON recurring_jobs;
+DROP POLICY IF EXISTS "recurring_jobs_authenticated_update" ON recurring_jobs;
+DROP POLICY IF EXISTS "recurring_jobs_authenticated_delete" ON recurring_jobs;
+DROP POLICY IF EXISTS "recurring_jobs_owner_select" ON recurring_jobs;
+DROP POLICY IF EXISTS "recurring_jobs_owner_insert" ON recurring_jobs;
+DROP POLICY IF EXISTS "recurring_jobs_owner_update" ON recurring_jobs;
+DROP POLICY IF EXISTS "recurring_jobs_owner_delete" ON recurring_jobs;
+CREATE POLICY "recurring_jobs_owner_select"
+    ON recurring_jobs FOR SELECT TO authenticated USING (owner_id = auth.uid());
+CREATE POLICY "recurring_jobs_owner_insert"
+    ON recurring_jobs FOR INSERT TO authenticated WITH CHECK (owner_id = auth.uid());
+CREATE POLICY "recurring_jobs_owner_update"
+    ON recurring_jobs FOR UPDATE TO authenticated USING (owner_id = auth.uid()) WITH CHECK (owner_id = auth.uid());
+CREATE POLICY "recurring_jobs_owner_delete"
+    ON recurring_jobs FOR DELETE TO authenticated USING (owner_id = auth.uid());
+
+-- invoices
+DROP POLICY IF EXISTS "invoices_authenticated_select" ON invoices;
+DROP POLICY IF EXISTS "invoices_authenticated_insert" ON invoices;
+DROP POLICY IF EXISTS "invoices_authenticated_update" ON invoices;
+DROP POLICY IF EXISTS "invoices_authenticated_delete" ON invoices;
+DROP POLICY IF EXISTS "invoices_owner_select" ON invoices;
+DROP POLICY IF EXISTS "invoices_owner_insert" ON invoices;
+DROP POLICY IF EXISTS "invoices_owner_update" ON invoices;
+DROP POLICY IF EXISTS "invoices_owner_delete" ON invoices;
+CREATE POLICY "invoices_owner_select"
+    ON invoices FOR SELECT TO authenticated USING (owner_id = auth.uid());
+CREATE POLICY "invoices_owner_insert"
+    ON invoices FOR INSERT TO authenticated WITH CHECK (owner_id = auth.uid());
+CREATE POLICY "invoices_owner_update"
+    ON invoices FOR UPDATE TO authenticated USING (owner_id = auth.uid()) WITH CHECK (owner_id = auth.uid());
+CREATE POLICY "invoices_owner_delete"
+    ON invoices FOR DELETE TO authenticated USING (owner_id = auth.uid());
+
+-- invoice_items
+DROP POLICY IF EXISTS "invoice_items_authenticated_select" ON invoice_items;
+DROP POLICY IF EXISTS "invoice_items_authenticated_insert" ON invoice_items;
+DROP POLICY IF EXISTS "invoice_items_authenticated_update" ON invoice_items;
+DROP POLICY IF EXISTS "invoice_items_authenticated_delete" ON invoice_items;
+DROP POLICY IF EXISTS "invoice_items_owner_select" ON invoice_items;
+DROP POLICY IF EXISTS "invoice_items_owner_insert" ON invoice_items;
+DROP POLICY IF EXISTS "invoice_items_owner_update" ON invoice_items;
+DROP POLICY IF EXISTS "invoice_items_owner_delete" ON invoice_items;
+CREATE POLICY "invoice_items_owner_select"
+    ON invoice_items FOR SELECT TO authenticated USING (owner_id = auth.uid());
+CREATE POLICY "invoice_items_owner_insert"
+    ON invoice_items FOR INSERT TO authenticated WITH CHECK (owner_id = auth.uid());
+CREATE POLICY "invoice_items_owner_update"
+    ON invoice_items FOR UPDATE TO authenticated USING (owner_id = auth.uid()) WITH CHECK (owner_id = auth.uid());
+CREATE POLICY "invoice_items_owner_delete"
+    ON invoice_items FOR DELETE TO authenticated USING (owner_id = auth.uid());
+
+-- payments
+DROP POLICY IF EXISTS "payments_authenticated_select" ON payments;
+DROP POLICY IF EXISTS "payments_authenticated_insert" ON payments;
+DROP POLICY IF EXISTS "payments_authenticated_update" ON payments;
+DROP POLICY IF EXISTS "payments_authenticated_delete" ON payments;
+DROP POLICY IF EXISTS "payments_owner_select" ON payments;
+DROP POLICY IF EXISTS "payments_owner_insert" ON payments;
+DROP POLICY IF EXISTS "payments_owner_update" ON payments;
+DROP POLICY IF EXISTS "payments_owner_delete" ON payments;
+CREATE POLICY "payments_owner_select"
+    ON payments FOR SELECT TO authenticated USING (owner_id = auth.uid());
+CREATE POLICY "payments_owner_insert"
+    ON payments FOR INSERT TO authenticated WITH CHECK (owner_id = auth.uid());
+CREATE POLICY "payments_owner_update"
+    ON payments FOR UPDATE TO authenticated USING (owner_id = auth.uid()) WITH CHECK (owner_id = auth.uid());
+CREATE POLICY "payments_owner_delete"
+    ON payments FOR DELETE TO authenticated USING (owner_id = auth.uid());
+
+-- customer_portal_tokens (remove anon read; app validates tokens server-side)
+DROP POLICY IF EXISTS "portal_tokens_authenticated_select" ON customer_portal_tokens;
+DROP POLICY IF EXISTS "portal_tokens_authenticated_insert" ON customer_portal_tokens;
+DROP POLICY IF EXISTS "portal_tokens_authenticated_update" ON customer_portal_tokens;
+DROP POLICY IF EXISTS "portal_tokens_authenticated_delete" ON customer_portal_tokens;
+DROP POLICY IF EXISTS "portal_tokens_anon_select" ON customer_portal_tokens;
+DROP POLICY IF EXISTS "portal_tokens_owner_select" ON customer_portal_tokens;
+DROP POLICY IF EXISTS "portal_tokens_owner_insert" ON customer_portal_tokens;
+DROP POLICY IF EXISTS "portal_tokens_owner_update" ON customer_portal_tokens;
+DROP POLICY IF EXISTS "portal_tokens_owner_delete" ON customer_portal_tokens;
+CREATE POLICY "portal_tokens_owner_select"
+    ON customer_portal_tokens FOR SELECT TO authenticated USING (owner_id = auth.uid());
+CREATE POLICY "portal_tokens_owner_insert"
+    ON customer_portal_tokens FOR INSERT TO authenticated WITH CHECK (owner_id = auth.uid());
+CREATE POLICY "portal_tokens_owner_update"
+    ON customer_portal_tokens FOR UPDATE TO authenticated USING (owner_id = auth.uid()) WITH CHECK (owner_id = auth.uid());
+CREATE POLICY "portal_tokens_owner_delete"
+    ON customer_portal_tokens FOR DELETE TO authenticated USING (owner_id = auth.uid());
+
+
+-- ============================================================================
 -- NOTES
 -- ============================================================================
--- 1. All 30 existing public tables have RLS ENABLED and authenticated CRUD
---    policies. This is an internal business application where every logged-in
---    user should see all data within the Supabase project.
+-- 1. All public tables have RLS ENABLED and authenticated CRUD policies.
+--    Most tables use USING(true) for full access within the Supabase project.
 --
--- 2. service_role (used by Edge Functions) bypasses RLS entirely. No explicit
---    service_role policies are needed -- Supabase automatically grants full
---    access to service_role regardless of RLS settings.
+-- 2. SENSITIVE + CORE BUSINESS TABLES use owner_id = auth.uid() for
+--    authenticated row-level filtering:
+--      - api_keys           : owner-only (key hashes, scopes, rate limits)
+--      - webhook_endpoints  : owner-only (webhook secrets, URLs)
+--      - business_settings  : owner-only for authenticated; anon SELECT kept
+--      - profiles           : owner-only (id = auth.uid() OR owner_id = auth.uid())
+--      - customers, locations, jobs, estimates, recurring_jobs
+--      - invoices, invoice_items, payments
+--      - customer_portal_tokens
 --
--- 3. Special anon access:
+-- 3. service_role (used by Edge Functions) bypasses RLS entirely.
+--
+-- 4. Special anon access:
 --      - business_settings : anon SELECT (booking widget reads biz info)
---      - jobs              : anon INSERT (booking widget creates jobs)
---      - customer_portal_tokens : anon SELECT (portal auth, future table)
+--      - jobs              : anon INSERT (booking widget creates jobs, RESTRICTED)
+--      - customer_portal_tokens : no anon access (validated server-side)
 --
--- 4. Tables that had RLS DISABLED in production (action_queue, call_logs,
---    message_logs) are explicitly enabled here. Applying this file will
---    protect those tables with RLS.
---
--- 5. The old owner_id = auth.uid() pattern has been replaced with
---    TO authenticated USING (true). In a single-tenant internal app this
---    is simpler and avoids issues where Edge Functions or service_role
---    writes rows that the authenticated user then cannot read.
+-- 5. Tables that had RLS DISABLED in production (action_queue, call_logs,
+--    message_logs) are explicitly enabled here.
 --
 -- 6. Storage bucket policies (job-photos, job-signatures) are NOT included
 --    here. Manage storage policies via the Supabase Dashboard.
 --
--- 7. When customer_portal_tokens is created, uncomment Section 31 above
---    and apply it.
+-- 7. RLS hardening overrides were applied in migration
+--    20260312100000_harden_multitenant_rls.sql and mirrored in Section 35.
 -- ============================================================================

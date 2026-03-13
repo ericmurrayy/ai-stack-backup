@@ -31,9 +31,6 @@ export default function JobDetailScreen() {
     location,
     estimateItems,
     invoiceItems,
-    photos,
-    signatures,
-    payments,
     estimateTotal,
     invoiceTotal,
     paidTotal,
@@ -103,7 +100,7 @@ export default function JobDetailScreen() {
 
     if (result.success) {
       Alert.alert('Success', 'Payment completed successfully');
-    } else if (result.error !== 'Payment canceled') {
+    } else if (result.error !== 'Payment cancelled') {
       Alert.alert('Payment Failed', result.error);
     }
   };
@@ -147,7 +144,7 @@ export default function JobDetailScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ headerTitle: job.title }} />
+      <Stack.Screen options={{ headerTitle: job.title ?? 'Job Details' }} />
       <ScrollView style={styles.container}>
         <View style={styles.content}>
           {/* Header Card */}

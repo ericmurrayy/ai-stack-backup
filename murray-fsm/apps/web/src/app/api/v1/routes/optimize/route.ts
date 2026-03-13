@@ -3,43 +3,68 @@
 // Optimize technician routes for the day
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { authenticateApiRequest } from '@/lib/api-auth';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { authenticateAndRateLimit } from '@/lib/api-middleware';
+import { applyRateLimitHeaders } from '@/lib/rate-limiter';
 import { hasScope, optimizeRoute, dispatchJobs, findNearestTechnician } from '@murray-fsm/services';
+import { z } from 'zod';
+import {
+  validateBody,
+  validateQuery,
+  isoDateString,
+  uuidString,
+  latLngQuerySchema,
+  ROUTE_OPTIMIZE_MODES,
+} from '@/lib/api-validation';
+
+// --- Zod Schemas ---
+
+const optimizeBodySchema = z.object({
+  date: isoDateString.optional(),
+  technicianIds: z.array(uuidString).max(50, 'Too many technician IDs (max 50)').optional(),
+  mode: z.enum(ROUTE_OPTIMIZE_MODES).default('optimize'),
+});
+
+const nearestQuerySchema = latLngQuerySchema;
 
 // POST /api/v1/routes/optimize - Optimize routes for a day
 export async function POST(request: NextRequest) {
-  const auth = await authenticateApiRequest(request);
+  const { authenticated, auth, rateLimit, error: authError } = await authenticateAndRateLimit(request);
 
-  if (!auth.authenticated) {
-    return NextResponse.json(
-      { error: auth.error, code: 'UNAUTHORIZED' },
-      { status: auth.statusCode || 401 }
-    );
-  }
+  if (!authenticated || !rateLimit.allowed) return authError!;
 
   if (!hasScope(auth.scopes!, 'read:jobs') || !hasScope(auth.scopes!, 'read:team')) {
-    return NextResponse.json(
-      { error: 'Insufficient permissions', code: 'FORBIDDEN' },
-      { status: 403 }
+    return applyRateLimitHeaders(
+      NextResponse.json(
+        { error: 'Insufficient permissions', code: 'FORBIDDEN' },
+        { status: 403 }
+      ),
+      rateLimit
     );
   }
 
   try {
-    const supabase = createClient();
+    const supabase = createAdminClient();
     const body = await request.json();
-    const { date, technicianIds, mode = 'optimize' } = body;
+
+    // Validate request body
+    const bodyResult = validateBody(optimizeBodySchema, body);
+    if (!bodyResult.success) return bodyResult.response;
+
+    const { date, technicianIds, mode } = bodyResult.data;
 
     // Get the target date (default to today)
     const targetDate = date ? new Date(date) : new Date();
-    const startOfDay = new Date(targetDate.setHours(0, 0, 0, 0));
-    const endOfDay = new Date(targetDate.setHours(23, 59, 59, 999));
+    const startOfDay = new Date(targetDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(targetDate);
+    endOfDay.setHours(23, 59, 59, 999);
 
     // Fetch jobs for the day
     const { data: jobs, error: jobsError } = await supabase
       .from('jobs')
       .select(`
-        id, title, scheduled_start, scheduled_end, assigned_to,
+        id, title, scheduled_start, scheduled_end, assigned_technician_id,
         estimated_duration_minutes, priority,
         location:locations(id, lat, lng, address1, city)
       `)
@@ -53,8 +78,8 @@ export async function POST(request: NextRequest) {
 
     // Fetch technicians
     let techQuery = supabase
-      .from('team_members')
-      .select('id, full_name, color')
+      .from('technicians')
+      .select('id, name, color')
       .eq('owner_id', auth.ownerId)
       .eq('deleted', false)
       .eq('is_active', true)
@@ -104,7 +129,7 @@ export async function POST(request: NextRequest) {
             end: new Date(j.scheduled_end),
           } : undefined,
           priority: j.priority || 0,
-          assignedTo: j.assigned_to,
+          assignedTo: j.assigned_technician_id,
         };
       });
 
@@ -118,8 +143,10 @@ export async function POST(request: NextRequest) {
         maxJobs: 8,
       }));
 
+      const dispatchStartTime = new Date(startOfDay);
+      dispatchStartTime.setHours(8, 0, 0, 0);
       const dispatchResult = dispatchJobs(routingJobs, techsWithLocations, {
-        startTime: new Date(startOfDay.setHours(8, 0, 0, 0)),
+        startTime: dispatchStartTime,
         prioritizeUrgent: true,
       });
 
@@ -129,7 +156,7 @@ export async function POST(request: NextRequest) {
           const tech = technicians?.find(t => t.id === techId);
           return {
             technicianId: techId,
-            technicianName: tech?.full_name,
+            technicianName: tech?.name,
             technicianColor: tech?.color,
             stops: route.stops.map(stop => ({
               jobId: stop.jobId,
@@ -155,8 +182,10 @@ export async function POST(request: NextRequest) {
         ? routingJobs.filter(j => !j.assignedTo || j.assignedTo === techId)
         : routingJobs;
 
+      const optimizeStartTime = new Date(startOfDay);
+      optimizeStartTime.setHours(8, 0, 0, 0);
       const optimized = optimizeRoute(techJobs, {
-        startTime: new Date(startOfDay.setHours(8, 0, 0, 0)),
+        startTime: optimizeStartTime,
         startLocation: defaultStartLocation,
         prioritizeUrgent: true,
       });
@@ -179,10 +208,13 @@ export async function POST(request: NextRequest) {
       };
     }
 
-    return NextResponse.json({
-      success: true,
-      data: result,
-    });
+    return applyRateLimitHeaders(
+      NextResponse.json({
+        success: true,
+        data: result,
+      }),
+      rateLimit
+    );
   } catch (error) {
     console.error('Route optimization error:', error);
     return NextResponse.json(
@@ -194,35 +226,36 @@ export async function POST(request: NextRequest) {
 
 // GET /api/v1/routes/nearest - Find nearest available technician
 export async function GET(request: NextRequest) {
-  const auth = await authenticateApiRequest(request);
+  const { authenticated, auth, rateLimit, error: authError } = await authenticateAndRateLimit(request);
 
-  if (!auth.authenticated) {
-    return NextResponse.json(
-      { error: auth.error, code: 'UNAUTHORIZED' },
-      { status: auth.statusCode || 401 }
+  if (!authenticated || !rateLimit.allowed) return authError!;
+
+  if (!hasScope(auth.scopes!, 'read:team')) {
+    return applyRateLimitHeaders(
+      NextResponse.json(
+        { error: 'Insufficient permissions', code: 'FORBIDDEN' },
+        { status: 403 }
+      ),
+      rateLimit
     );
   }
 
   try {
-    const supabase = createClient();
+    const supabase = createAdminClient();
     const { searchParams } = new URL(request.url);
 
-    const lat = parseFloat(searchParams.get('lat') || '0');
-    const lng = parseFloat(searchParams.get('lng') || '0');
+    // Validate query parameters
+    const queryResult = validateQuery(nearestQuerySchema, searchParams);
+    if (!queryResult.success) return queryResult.response;
 
-    if (!lat || !lng) {
-      return NextResponse.json(
-        { error: 'lat and lng are required', code: 'VALIDATION_ERROR' },
-        { status: 400 }
-      );
-    }
+    const { lat, lng } = queryResult.data;
 
     // Get technician current locations
     const { data: locations } = await supabase
       .from('technician_locations')
       .select(`
         team_member_id, lat, lng, recorded_at,
-        team_member:team_members(id, full_name, phone, color, is_active)
+        team_member:technicians(id, name, phone, color, is_active)
       `)
       .eq('owner_id', auth.ownerId)
       .gte('recorded_at', new Date(Date.now() - 30 * 60 * 1000).toISOString()) // Last 30 minutes
@@ -241,7 +274,7 @@ export async function GET(request: NextRequest) {
       id: loc.team_member_id,
       currentLocation: { id: loc.team_member_id, lat: loc.lat, lng: loc.lng },
       available: true,
-      name: loc.team_member?.full_name,
+      name: loc.team_member?.name,
       phone: loc.team_member?.phone,
       color: loc.team_member?.color,
     }));
@@ -252,28 +285,34 @@ export async function GET(request: NextRequest) {
     );
 
     if (!nearest) {
-      return NextResponse.json({
-        success: true,
-        data: null,
-        message: 'No available technicians found',
-      });
+      return applyRateLimitHeaders(
+        NextResponse.json({
+          success: true,
+          data: null,
+          message: 'No available technicians found',
+        }),
+        rateLimit
+      );
     }
 
     const tech = techsWithLocations.find(t => t.id === nearest.technicianId);
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        technician: {
-          id: tech?.id,
-          name: tech?.name,
-          phone: tech?.phone,
-          color: tech?.color,
+    return applyRateLimitHeaders(
+      NextResponse.json({
+        success: true,
+        data: {
+          technician: {
+            id: tech?.id,
+            name: tech?.name,
+            phone: tech?.phone,
+            color: tech?.color,
+          },
+          distance: Math.round(nearest.distance / 1000 * 10) / 10, // km
+          eta: nearest.eta, // minutes
         },
-        distance: Math.round(nearest.distance / 1000 * 10) / 10, // km
-        eta: nearest.eta, // minutes
-      },
-    });
+      }),
+      rateLimit
+    );
   } catch (error) {
     console.error('Nearest technician error:', error);
     return NextResponse.json(

@@ -5,15 +5,15 @@
 // Job Status Configuration
 // ============================================================================
 
+// Matches schema-v2.sql job_status enum
 export type JobStatus =
-  | 'lead'
-  | 'quoted'
+  | 'new'
+  | 'contacted'
   | 'scheduled'
-  | 'confirmed'
   | 'in_progress'
   | 'completed'
-  | 'invoiced'
-  | 'canceled';
+  | 'cancelled'
+  | 'spam';
 
 export const JOB_STATUS_CONFIG: Record<JobStatus, {
   label: string;
@@ -22,33 +22,26 @@ export const JOB_STATUS_CONFIG: Record<JobStatus, {
   textColor: string;
   description: string;
 }> = {
-  lead: {
-    label: 'Lead',
-    color: '#6366f1',
-    bgColor: 'bg-indigo-100',
-    textColor: 'text-indigo-800',
-    description: 'New lead, not yet quoted',
-  },
-  quoted: {
-    label: 'Quoted',
-    color: '#8b5cf6',
-    bgColor: 'bg-purple-100',
-    textColor: 'text-purple-800',
-    description: 'Estimate sent, waiting for approval',
-  },
-  scheduled: {
-    label: 'Scheduled',
+  new: {
+    label: 'New',
     color: '#3b82f6',
     bgColor: 'bg-blue-100',
     textColor: 'text-blue-800',
-    description: 'Job scheduled for future date',
+    description: 'New job, not yet contacted',
   },
-  confirmed: {
-    label: 'Confirmed',
+  contacted: {
+    label: 'Contacted',
+    color: '#6366f1',
+    bgColor: 'bg-indigo-100',
+    textColor: 'text-indigo-800',
+    description: 'Customer has been contacted',
+  },
+  scheduled: {
+    label: 'Scheduled',
     color: '#06b6d4',
     bgColor: 'bg-cyan-100',
     textColor: 'text-cyan-800',
-    description: 'Customer confirmed the appointment',
+    description: 'Job scheduled for future date',
   },
   in_progress: {
     label: 'In Progress',
@@ -64,19 +57,19 @@ export const JOB_STATUS_CONFIG: Record<JobStatus, {
     textColor: 'text-green-800',
     description: 'Work finished successfully',
   },
-  invoiced: {
-    label: 'Invoiced',
-    color: '#10b981',
-    bgColor: 'bg-emerald-100',
-    textColor: 'text-emerald-800',
-    description: 'Invoice sent to customer',
-  },
-  canceled: {
-    label: 'Canceled',
+  cancelled: {
+    label: 'Cancelled',
     color: '#ef4444',
     bgColor: 'bg-red-100',
     textColor: 'text-red-800',
-    description: 'Job was canceled',
+    description: 'Job was cancelled',
+  },
+  spam: {
+    label: 'Spam',
+    color: '#6b7280',
+    bgColor: 'bg-gray-100',
+    textColor: 'text-gray-800',
+    description: 'Flagged as spam',
   },
 };
 
@@ -89,7 +82,7 @@ export type PaymentStatus =
   | 'processing'
   | 'succeeded'
   | 'failed'
-  | 'canceled'
+  | 'cancelled'
   | 'refunded';
 
 export const PAYMENT_STATUS_CONFIG: Record<PaymentStatus, {
@@ -122,8 +115,8 @@ export const PAYMENT_STATUS_CONFIG: Record<PaymentStatus, {
     bgColor: 'bg-red-100',
     textColor: 'text-red-800',
   },
-  canceled: {
-    label: 'Canceled',
+  cancelled: {
+    label: 'Cancelled',
     color: '#6b7280',
     bgColor: 'bg-gray-100',
     textColor: 'text-gray-800',
@@ -346,7 +339,7 @@ export const DEFAULTS = {
   CURRENCY: 'USD',
 
   // Timezone
-  TIMEZONE: 'America/Chicago',
+  TIMEZONE: 'America/New_York',
 } as const;
 
 // ============================================================================
@@ -424,8 +417,39 @@ export const AGREEMENT_STATUS_CONFIG: Record<import('./types').AgreementStatus, 
 }> = {
   active: { label: 'Active', bgColor: 'bg-green-100', textColor: 'text-green-800' },
   expired: { label: 'Expired', bgColor: 'bg-slate-100', textColor: 'text-slate-800' },
-  canceled: { label: 'Canceled', bgColor: 'bg-red-100', textColor: 'text-red-800' },
+  cancelled: { label: 'Cancelled', bgColor: 'bg-red-100', textColor: 'text-red-800' },
 } as const;
+
+// ============================================================================
+// Job Status Transition Rules
+// ============================================================================
+
+/** Valid next statuses for each current job status */
+export const JOB_STATUS_TRANSITIONS: Record<JobStatus, readonly JobStatus[]> = {
+  new: ['contacted', 'scheduled', 'cancelled', 'spam'],
+  contacted: ['scheduled', 'cancelled', 'spam'],
+  scheduled: ['in_progress', 'cancelled'],
+  in_progress: ['completed', 'scheduled'], // allow reschedule
+  completed: [], // terminal state
+  cancelled: ['new'], // allow re-opening
+  spam: ['new'], // allow recovery from false positive
+} as const;
+
+/** Check if a status transition is valid */
+export function isValidStatusTransition(from: JobStatus, to: JobStatus): boolean {
+  if (from === to) return true; // no-op is always valid
+  return JOB_STATUS_TRANSITIONS[from].includes(to);
+}
+
+/** Get human-readable invalid transition error */
+export function getTransitionError(from: JobStatus, to: JobStatus): string | null {
+  if (isValidStatusTransition(from, to)) return null;
+  const allowed = JOB_STATUS_TRANSITIONS[from];
+  if (allowed.length === 0) {
+    return `Cannot change status from "${from}" — it is a terminal state`;
+  }
+  return `Cannot change status from "${from}" to "${to}". Valid transitions: ${allowed.join(', ')}`;
+}
 
 // ============================================================================
 // Technician Skills (garage door services)

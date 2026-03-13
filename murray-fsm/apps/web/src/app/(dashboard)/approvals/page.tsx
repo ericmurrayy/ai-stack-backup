@@ -21,7 +21,7 @@ import { ApprovalActions } from './ApprovalActions';
 import type { ActionQueueItem } from '@/types/database';
 
 async function getPendingApprovals(): Promise<ActionQueueItem[]> {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { data, error } = await supabase
     .from('action_queue')
@@ -40,7 +40,7 @@ async function getPendingApprovals(): Promise<ActionQueueItem[]> {
 }
 
 async function getRecentApprovals(): Promise<ActionQueueItem[]> {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { data, error } = await supabase
     .from('action_queue')

@@ -173,9 +173,9 @@ export function getDailyBreakdown(entries: TimeEntry[]): DailyBreakdown[] {
 
   const breakdowns: DailyBreakdown[] = [];
 
-  for (const [date, dateEntries] of grouped) {
+  for (const [date, dateEntries] of Array.from(grouped)) {
     const totalMinutes = dateEntries.reduce(
-      (sum, entry) => sum + calculateDuration(entry.started_at, entry.ended_at),
+      (sum: number, entry: TimeEntry) => sum + calculateDuration(entry.started_at, entry.ended_at),
       0
     );
 
@@ -243,7 +243,7 @@ export function calculateOvertimeHours(
 
   // Sum overtime across weeks
   let totalOvertime = 0;
-  for (const hours of weeklyHours.values()) {
+  for (const hours of Array.from(weeklyHours.values())) {
     if (hours > weeklyLimit) {
       totalOvertime += hours - weeklyLimit;
     }

@@ -64,8 +64,25 @@ async function getMarketingData() {
     stats: c.stats || { sent: 0, delivered: 0, opened: 0, clicked: 0, converted: 0 },
   }));
 
-  // Keep referrals as empty for now (no referrals table yet)
-  const referrals: Referral[] = [];
+  // Fetch referrals with customer names
+  const { data: referralData } = await supabase
+    .from('referrals')
+    .select(`
+      id, status, referrer_reward_cents, created_at,
+      referrer:customers!referrals_referrer_customer_id_fkey(name),
+      referred:customers!referrals_referred_customer_id_fkey(name)
+    `)
+    .eq('deleted', false)
+    .order('created_at', { ascending: false });
+
+  const referrals: Referral[] = (referralData || []).map((r: any) => ({
+    id: r.id,
+    referrer_name: r.referrer?.name ?? 'Unknown',
+    referred_name: r.referred?.name ?? 'Unknown',
+    status: r.status,
+    referrer_reward_cents: r.referrer_reward_cents ?? 0,
+    created_at: r.created_at,
+  }));
 
   return { campaigns, referrals };
 }

@@ -1,0 +1,21 @@
+
+> @murray-fsm/mobile@1.0.0 typecheck D:\murrayfsm\murray-fsm-repo\murray-fsm\apps\mobile
+> tsc --noEmit
+
+app/_layout.tsx(13,32): error TS2580: Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node`.
+src/components/Input.tsx(29,13): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(props: TextInputProps): TextInput', gave the following error.
+    Type '"" | { borderColor: string; } | undefined' is not assignable to type 'TextStyle | Falsy | RegisteredStyle<TextStyle> | RecursiveArray<TextStyle | Falsy | RegisteredStyle<TextStyle>> | readonly (TextStyle | ... 1 more ... | RegisteredStyle<...>)[]'.
+      Type '""' is not assignable to type 'TextStyle | Falsy | RegisteredStyle<TextStyle> | RecursiveArray<TextStyle | Falsy | RegisteredStyle<TextStyle>> | readonly (TextStyle | ... 1 more ... | RegisteredStyle<...>)[]'.
+  Overload 2 of 2, '(props: TextInputProps, context: any): TextInput', gave the following error.
+    Type '"" | { borderColor: string; } | undefined' is not assignable to type 'TextStyle | Falsy | RegisteredStyle<TextStyle> | RecursiveArray<TextStyle | Falsy | RegisteredStyle<TextStyle>> | readonly (TextStyle | ... 1 more ... | RegisteredStyle<...>)[]'.
+src/hooks/useJob.ts(129,7): error TS2783: 'job_id' is specified more than once, so this usage will be overwritten.
+src/services/supabase.ts(8,21): error TS2580: Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node`.
+src/services/supabase.ts(9,25): error TS2580: Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node`.
+src/store/index.ts(5,22): error TS2305: Module '"@legendapp/state"' has no exported member 'syncState'.
+src/store/index.ts(6,41): error TS2307: Cannot find module '@legendapp/state/sync' or its corresponding type declarations.
+src/store/index.ts(7,32): error TS2307: Cannot find module '@legendapp/state/sync-plugins/supabase' or its corresponding type declarations.
+src/store/index.ts(61,14): error TS7006: Parameter 'from' implicitly has an 'any' type.
+D:\murrayfsm\murray-fsm-repo\murray-fsm\apps\mobile:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @murray-fsm/mobile@1.0.0 typecheck: `tsc --noEmit`
+Exit status 2

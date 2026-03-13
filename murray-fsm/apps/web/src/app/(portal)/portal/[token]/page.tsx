@@ -2,7 +2,7 @@
 // ===============================
 // Self-service portal for customers to view jobs, approve estimates, and track service
 
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -28,7 +28,10 @@ import {
   Wrench,
   Plus,
 } from 'lucide-react';
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { EstimateActions } from './EstimateActions';
+import { PaymentSection } from './PaymentSection';
 
 // ---------- Types matching the live DB schema ----------
 
@@ -63,10 +66,14 @@ interface Estimate {
 
 interface PortalToken {
   id: string;
+  owner_id: string;
   customer_phone: string;
+  customer_email: string | null;
+  job_id: string | null;
   token: string;
   expires_at: string;
   created_at: string;
+  last_accessed_at: string | null;
 }
 
 // ---------- Estimate status config ----------
@@ -75,7 +82,7 @@ const estimateStatusConfig: Record<string, { label: string; variant: 'default' |
   draft: { label: 'Draft', variant: 'default' },
   sent: { label: 'Awaiting Approval', variant: 'warning' },
   approved: { label: 'Approved', variant: 'success' },
-  declined: { label: 'Declined', variant: 'danger' },
+  rejected: { label: 'Declined', variant: 'danger' },
   expired: { label: 'Expired', variant: 'default' },
 };
 
@@ -106,27 +113,39 @@ const STATUS_STEPS = [
 // ---------- Data fetching ----------
 
 async function getPortalData(token: string) {
-  const supabase = createClient();
+  const supabase = createAdminClient();
 
   // 1. Verify token from customer_portal_tokens
   const { data: portalToken } = await supabase
     .from('customer_portal_tokens')
-    .select('id, customer_phone, token, expires_at, created_at')
+    .select('id, owner_id, customer_phone, customer_email, job_id, token, expires_at, created_at, last_accessed_at')
     .eq('token', token)
     .gt('expires_at', new Date().toISOString())
-    .single();
+    .single<PortalToken>();
 
   if (!portalToken) return null;
+
+  await supabase
+    .from('customer_portal_tokens')
+    .update({ last_accessed_at: new Date().toISOString() })
+    .eq('id', portalToken.id);
 
   const customerPhone = portalToken.customer_phone;
 
   // 2. Get all jobs for this customer by phone_e164
-  const { data: jobs } = await supabase
+  let jobsQuery = supabase
     .from('jobs')
     .select('id, job_number, customer_name, phone_e164, email, city, address, service_category, urgency, issue_description, scheduled_at, status, created_at, updated_at')
+    .eq('owner_id', portalToken.owner_id)
     .eq('phone_e164', customerPhone)
     .order('created_at', { ascending: false })
     .limit(50);
+
+  if (portalToken.job_id) {
+    jobsQuery = jobsQuery.eq('id', portalToken.job_id);
+  }
+
+  const { data: jobs } = await jobsQuery;
 
   const allJobs: Job[] = jobs || [];
 
@@ -166,9 +185,10 @@ async function getPortalData(token: string) {
 export default async function CustomerPortalPage({
   params,
 }: {
-  params: { token: string };
+  params: Promise<{ token: string }>;
 }) {
-  const data = await getPortalData(params.token);
+  const { token } = await params;
+  const data = await getPortalData(token);
 
   if (!data) {
     notFound();
@@ -428,14 +448,12 @@ export default async function CustomerPortalPage({
                           </div>
                         </div>
                         {isActionable && !isExpired && (
-                          <div className="flex gap-2">
-                            <Button size="sm" variant="danger">
-                              Decline
-                            </Button>
-                            <Button size="sm" variant="primary">
-                              Approve
-                            </Button>
-                          </div>
+                          <EstimateActions
+                            token={token}
+                            estimateId={estimate.id}
+                            estimateNumber={estimate.estimate_number}
+                            totalCents={estimate.total_cents}
+                          />
                         )}
                       </div>
                     </div>
@@ -516,6 +534,18 @@ export default async function CustomerPortalPage({
           )}
         </section>
 
+        {/* Payment Section - for completed jobs with balances */}
+        {completedJobs.length > 0 && (
+          <section>
+            <h2 className="text-lg font-semibold text-slate-900 mb-4">Payments</h2>
+            <Card className="p-6 text-center">
+              <p className="text-slate-500 mb-2">
+                If you have an outstanding balance, your technician will provide you with a payment link.
+              </p>
+            </Card>
+          </section>
+        )}
+
         {/* Book New Service CTA */}
         <Card className="p-6 text-center">
           <div className="flex flex-col items-center">
@@ -524,12 +554,12 @@ export default async function CustomerPortalPage({
             </div>
             <h3 className="text-lg font-semibold text-slate-900 mb-2">Need Service?</h3>
             <p className="text-slate-500 mb-4">Schedule a new appointment or request a quote</p>
-            <a href="/book">
+            <Link href="/book">
               <Button size="lg">
                 Book New Service
                 <ArrowRight className="w-4 h-4 ml-1" />
               </Button>
-            </a>
+            </Link>
           </div>
         </Card>
 

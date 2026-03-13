@@ -148,7 +148,7 @@ export function nearestNeighborRoute(
       );
 
       // Apply priority bonus (higher priority = lower effective distance)
-      const priority = unvisited[i].priority || 0;
+      const priority = Math.min(Math.max(unvisited[i].priority || 0, 0), 10);
       const effectiveDistance = dist * (1 - priority * 0.1);
 
       if (effectiveDistance < nearestDistance) {
@@ -174,7 +174,7 @@ export function twoOptImprove(
   startLocation: Location,
   maxIterations: number = 100
 ): Job[] {
-  if (jobs.length < 4) return jobs;
+  if (jobs.length < 3) return jobs;
 
   let improved = true;
   let iterations = 0;

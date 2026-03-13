@@ -88,7 +88,7 @@ export function calculateInventoryValue(
   let totalRetail = 0;
 
   for (const item of items) {
-    if (item.deleted) continue;
+    if (item.deleted || !item.is_active) continue;
     totalCost += item.cost_cents * item.qty_on_hand;
     totalRetail += item.price_cents * item.qty_on_hand;
   }

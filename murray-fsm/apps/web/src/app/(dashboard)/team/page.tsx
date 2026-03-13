@@ -40,7 +40,7 @@ interface TeamMember {
 }
 
 async function getTeamData(): Promise<TeamMember[]> {
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const { data: members } = await supabase
     .from('technicians')
@@ -49,62 +49,86 @@ async function getTeamData(): Promise<TeamMember[]> {
     .order('name');
 
   if (!members?.length) {
-    return [
-      {
-        id: '1',
-        name: 'Mike Johnson',
-        email: 'mike@example.com',
-        phone: '+15551234567',
-        role: 'technician',
-        color: '#3b82f6',
-        skills: ['springs', 'repair', 'openers'],
-        is_active: true,
-        hourly_rate_cents: 2500,
-        jobs_today: 3,
-        jobs_this_week: 12,
-        revenue_this_month: 875000,
-        avg_rating: 4.8,
-      },
-      {
-        id: '2',
-        name: 'Sarah Williams',
-        email: 'sarah@example.com',
-        phone: '+15559876543',
-        role: 'technician',
-        color: '#22c55e',
-        skills: ['installation', 'panels'],
-        is_active: true,
-        hourly_rate_cents: 2800,
-        jobs_today: 2,
-        jobs_this_week: 10,
-        revenue_this_month: 920000,
-        avg_rating: 4.9,
-      },
-      {
-        id: '3',
-        name: 'Tom Davis',
-        email: 'tom@example.com',
-        phone: null,
-        role: 'dispatcher',
-        color: '#f59e0b',
-        skills: [],
-        is_active: true,
-        hourly_rate_cents: 2000,
-        jobs_today: 0,
-        jobs_this_week: 0,
-        revenue_this_month: 0,
-        avg_rating: 0,
-      },
-    ];
+    return [];
   }
 
-  return members.map((m: any) => ({
-    ...m,
-    jobs_today: 0,
-    jobs_this_week: 0,
-    revenue_this_month: 0,
-    avg_rating: 0,
-  }));
+  // Date boundaries
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+  const dayOfWeek = now.getDay();
+  const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+  const weekStartISO = weekStart.toISOString();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+  // Fetch jobs assigned to any technician this month (batch)
+  const { data: monthJobs } = await supabase
+    .from('jobs')
+    .select('id, assigned_technician_id, status, created_at, scheduled_at')
+    .not('assigned_technician_id', 'is', null)
+    .gte('created_at', monthStart)
+    .eq('is_spam', false);
+
+  // Fetch reviews linked via jobs for each tech
+  const { data: reviews } = await supabase
+    .from('reviews')
+    .select('id, rating, job_id')
+    .eq('deleted', false);
+
+  // Fetch estimates (approved this month) to compute revenue per technician
+  const { data: approvedEstimates } = await supabase
+    .from('estimates')
+    .select('id, total_cents, converted_job_id, approved_at')
+    .eq('status', 'approved')
+    .eq('deleted', false)
+    .gte('approved_at', monthStart);
+
+  // Build lookup: job_id → technician_id
+  const jobTechMap: Record<string, string> = {};
+  for (const j of monthJobs ?? []) {
+    if (j.assigned_technician_id) jobTechMap[j.id] = j.assigned_technician_id;
+  }
+
+  // Also get all jobs for review mapping (all time)
+  const { data: allAssignedJobs } = await supabase
+    .from('jobs')
+    .select('id, assigned_technician_id')
+    .not('assigned_technician_id', 'is', null);
+
+  const allJobTechMap: Record<string, string> = {};
+  for (const j of allAssignedJobs ?? []) {
+    if (j.assigned_technician_id) allJobTechMap[j.id] = j.assigned_technician_id;
+  }
+
+  return members.map((m: any) => {
+    const techJobs = (monthJobs ?? []).filter(j => j.assigned_technician_id === m.id);
+    const jobsToday = techJobs.filter(j => {
+      const d = j.scheduled_at || j.created_at;
+      return d && d >= todayStart;
+    }).length;
+    const jobsThisWeek = techJobs.filter(j => {
+      const d = j.scheduled_at || j.created_at;
+      return d && d >= weekStartISO;
+    }).length;
+
+    // Revenue: sum approved estimates whose converted_job_id is assigned to this tech
+    const revenue = (approvedEstimates ?? [])
+      .filter(e => e.converted_job_id && jobTechMap[e.converted_job_id] === m.id)
+      .reduce((sum, e) => sum + (e.total_cents ?? 0), 0);
+
+    // Avg rating from reviews where the review's job_id is assigned to this tech
+    const techReviews = (reviews ?? []).filter(r => r.job_id && allJobTechMap[r.job_id] === m.id);
+    const avgRating = techReviews.length > 0
+      ? techReviews.reduce((sum, r) => sum + r.rating, 0) / techReviews.length
+      : 0;
+
+    return {
+      ...m,
+      jobs_today: jobsToday,
+      jobs_this_week: jobsThisWeek,
+      revenue_this_month: revenue,
+      avg_rating: avgRating,
+    };
+  });
 }
 
 const roleColors: Record<string, string> = {
@@ -258,7 +282,7 @@ export default async function TeamPage() {
                 <TrendingUp className="w-5 h-5 text-purple-600" />
               </div>
               <div>
-                <div className="text-2xl font-bold text-slate-900">94%</div>
+                <div className="text-2xl font-bold text-slate-900">—</div>
                 <div className="text-sm text-slate-500">On-Time Rate</div>
               </div>
             </div>

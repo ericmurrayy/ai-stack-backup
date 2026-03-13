@@ -10,11 +10,12 @@ import {
   WEBHOOK_EVENT_CATEGORIES,
   type WebhookEvent,
 } from '@murray-fsm/services';
+import { logAction } from '@/lib/audit-log';
 
 // GET /api/webhooks - List all webhook endpoints
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
@@ -23,7 +24,8 @@ export async function GET(request: NextRequest) {
 
     const { data: webhooks, error } = await supabase
       .from('webhook_endpoints')
-      .select('*')
+      .select('id, url, events, description, is_active, failure_count, created_at, updated_at')
+      .eq('owner_id', user.id)
       .eq('deleted', false)
       .order('created_at', { ascending: false });
 
@@ -46,7 +48,7 @@ export async function GET(request: NextRequest) {
 // POST /api/webhooks - Create a new webhook endpoint
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createClient();
+    const supabase = await createClient();
 
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
@@ -67,6 +69,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate events
+    if (!Array.isArray(events) || events.length === 0) {
+      return NextResponse.json(
+        { error: 'events must be a non-empty array' },
+        { status: 400 }
+      );
+    }
     const validEvents = Object.keys(WEBHOOK_EVENT_DESCRIPTIONS) as WebhookEvent[];
     const invalidEvents = events.filter((e: string) => !validEvents.includes(e as WebhookEvent));
     if (invalidEvents.length > 0) {
@@ -82,6 +90,7 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabase
       .from('webhook_endpoints')
       .insert({
+        owner_id: user.id,
         url,
         secret,
         events,
@@ -95,6 +104,16 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) throw error;
+
+    logAction(request, {
+      ownerId: user.id,
+      actorId: user.id,
+      actorEmail: user.email,
+      action: 'webhook.created',
+      resourceType: 'webhook_endpoint',
+      resourceId: data.id,
+      metadata: { url, events },
+    });
 
     return NextResponse.json({
       success: true,
