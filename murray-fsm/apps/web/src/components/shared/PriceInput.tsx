@@ -1,12 +1,17 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 
 interface PriceInputProps {
   cents: number;
   onChange: (cents: number) => void;
   className?: string;
   'aria-label'?: string;
+}
+
+function centsToDisplay(c: number): string {
+  if (c === 0) return '';
+  return (c / 100).toFixed(2);
 }
 
 /**
@@ -19,22 +24,12 @@ interface PriceInputProps {
  */
 export function PriceInput({ cents, onChange, className, ...props }: PriceInputProps) {
   const [displayValue, setDisplayValue] = useState(() => centsToDisplay(cents));
-  const isFocused = useRef(false);
-
-  // Sync display when cents change externally (not while user is typing)
-  useEffect(() => {
-    if (!isFocused.current) {
-      setDisplayValue(centsToDisplay(cents));
-    }
-  }, [cents]);
-
-  function centsToDisplay(c: number): string {
-    if (c === 0) return '';
-    return (c / 100).toFixed(2);
-  }
+  const [isFocused, setIsFocused] = useState(false);
+  const value = isFocused ? displayValue : centsToDisplay(cents);
 
   function handleFocus(e: React.FocusEvent<HTMLInputElement>) {
-    isFocused.current = true;
+    setIsFocused(true);
+    setDisplayValue(centsToDisplay(cents));
     // Select all text for easy replacement
     e.target.select();
   }
@@ -51,7 +46,7 @@ export function PriceInput({ cents, onChange, className, ...props }: PriceInputP
   }
 
   function handleBlur() {
-    isFocused.current = false;
+    setIsFocused(false);
     // Reformat on blur
     const num = parseFloat(displayValue);
     const newCents = isNaN(num) ? 0 : Math.round(num * 100);
@@ -63,7 +58,7 @@ export function PriceInput({ cents, onChange, className, ...props }: PriceInputP
     <input
       type="text"
       inputMode="decimal"
-      value={displayValue}
+      value={value}
       onChange={handleChange}
       onFocus={handleFocus}
       onBlur={handleBlur}

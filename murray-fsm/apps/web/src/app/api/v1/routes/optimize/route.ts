@@ -3,7 +3,7 @@
 // Optimize technician routes for the day
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { authenticateAndRateLimit } from '@/lib/api-middleware';
 import { applyRateLimitHeaders } from '@/lib/rate-limiter';
 import { hasScope, optimizeRoute, dispatchJobs, findNearestTechnician } from '@murray-fsm/services';
@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
     const body = await request.json();
 
     // Validate request body
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
     const { data: jobs, error: jobsError } = await supabase
       .from('jobs')
       .select(`
-        id, title, scheduled_start, scheduled_end, assigned_to,
+        id, title, scheduled_start, scheduled_end, assigned_technician_id,
         estimated_duration_minutes, priority,
         location:locations(id, lat, lng, address1, city)
       `)
@@ -129,7 +129,7 @@ export async function POST(request: NextRequest) {
             end: new Date(j.scheduled_end),
           } : undefined,
           priority: j.priority || 0,
-          assignedTo: j.assigned_to,
+          assignedTo: j.assigned_technician_id,
         };
       });
 
@@ -241,7 +241,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
     const { searchParams } = new URL(request.url);
 
     // Validate query parameters

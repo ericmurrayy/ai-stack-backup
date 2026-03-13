@@ -5,9 +5,7 @@ import { useEffect } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { StripeProvider } from '@stripe/stripe-react-native';
-import { useObservable } from '@legendapp/state/react';
 import { useAuth } from '../src/hooks';
-import { authState$ } from '../src/store';
 import { setupNetworkListener } from '../src/utils/network';
 
 const STRIPE_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || '';
@@ -29,7 +27,7 @@ function AuthWrapper() {
       // Redirect to home
       router.replace('/(tabs)');
     }
-  }, [isAuthenticated, segments, loading]);
+  }, [isAuthenticated, segments, loading, router]);
 
   return null;
 }

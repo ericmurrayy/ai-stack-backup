@@ -3,7 +3,7 @@
 // Validates API keys and enforces rate limits
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { hashApiKey, hasScope, type ApiKeyScope } from '@murray-fsm/services';
 import {
   checkRateLimit,
@@ -56,7 +56,7 @@ export async function authenticateApiRequest(
   }
 
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
     const keyHash = hashApiKey(token);
 
     // Lookup API key by hash
@@ -199,7 +199,7 @@ export async function logApiUsage(
   request: NextRequest
 ): Promise<void> {
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     await supabase.from('api_key_usage').insert({
       api_key_id: apiKeyId,

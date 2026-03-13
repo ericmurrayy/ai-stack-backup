@@ -61,10 +61,6 @@ export default function CompanySettingsPage() {
     tax_rate: 0,
   });
 
-  useEffect(() => {
-    loadSettings();
-  }, []);
-
   async function loadSettings() {
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -84,6 +80,13 @@ export default function CompanySettingsPage() {
       }));
     }
   }
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void loadSettings();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   async function handleSave() {
     setSaving(true);

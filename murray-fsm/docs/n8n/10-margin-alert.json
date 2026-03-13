@@ -1,0 +1,215 @@
+{
+  "name": "10 - Job Margin Alert",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 14 * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Daily 9 AM ET",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build the 30-day lookback window in ISO format (UTC).\n// The scheduler fires at 14:00 UTC = 09:00 America/New_York (EST).\nconst now = new Date();\nconst thirtyDaysAgo = new Date(now);\nthirtyDaysAgo.setDate(now.getDate() - 30);\n\nconst fmt = (d) => d.toISOString().split('T')[0];\n\nreturn [{\n  json: {\n    startDate: fmt(thirtyDaysAgo),\n    endDate: fmt(now),\n    generatedAt: now.toISOString()\n  }\n}];"
+      },
+      "id": "calc-window",
+      "name": "Calculate 30-Day Window",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/invoices",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Prefer", "value": "return=representation" }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "select", "value": "total_cents,job:jobs!job_id(service_type)" },
+            { "name": "issue_date", "value": "=gte.{{ $('Calculate 30-Day Window').item.json.startDate }}" },
+            { "name": "issue_date2", "value": "=lte.{{ $('Calculate 30-Day Window').item.json.endDate }}" },
+            { "name": "status", "value": "=not.in.(void,written_off)" },
+            { "name": "deleted", "value": "=eq.false" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-invoices",
+      "name": "Fetch Last 30 Days Invoices",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ─── Hardcoded cost benchmarks (cents) ───────────────────────────────────\n// These mirror the seeded defaults in job_cost_benchmarks migration MUR-10.\n// emergency_repair : $200.00 → 20000 cents\n// standard_repair  : $187.50 → 18750 cents\n// installation     : $625.00 → 62500 cents\n// maintenance      :  $85.00 →  8500 cents\n//\n// If you add a new service_type to the DB benchmarks table, add it here too.\nconst COST_BENCHMARKS = {\n  emergency_repair: 20000,\n  standard_repair:  18750,\n  installation:     62500,\n  maintenance:       8500\n};\n\nconst MARGIN_THRESHOLD = 40; // percent\n\n// ─── Pull raw invoice rows ────────────────────────────────────────────────\nconst invoices = $input.all().map(i => i.json);\n\n// ─── Aggregate revenue per service_type ──────────────────────────────────\n// { service_type: { totalRevenueCents: number, count: number } }\nconst agg = {};\n\nfor (const inv of invoices) {\n  const serviceType = inv.job?.service_type;\n  // Skip rows where the job relationship is missing or type is unknown\n  if (!serviceType) continue;\n\n  if (!agg[serviceType]) {\n    agg[serviceType] = { totalRevenueCents: 0, count: 0 };\n  }\n  agg[serviceType].totalRevenueCents += (inv.total_cents || 0);\n  agg[serviceType].count += 1;\n}\n\n// ─── Calculate margin per service_type ───────────────────────────────────\nconst results = [];\n\nfor (const [serviceType, data] of Object.entries(agg)) {\n  if (data.count === 0) continue;\n\n  const avgRevenueCents = data.totalRevenueCents / data.count;\n  const costCents = COST_BENCHMARKS[serviceType];\n\n  // If we have no benchmark for this type, skip it (can't compute margin)\n  if (costCents === undefined) continue;\n\n  const marginPct = avgRevenueCents > 0\n    ? ((avgRevenueCents - costCents) / avgRevenueCents) * 100\n    : 0;\n\n  results.push({\n    serviceType,\n    avgRevenueCents: Math.round(avgRevenueCents),\n    avgRevenueDollars: (avgRevenueCents / 100).toFixed(2),\n    costCents,\n    costDollars: (costCents / 100).toFixed(2),\n    marginPct: parseFloat(marginPct.toFixed(2)),\n    belowThreshold: marginPct < MARGIN_THRESHOLD,\n    invoiceCount: data.count\n  });\n}\n\n// Sort: below-threshold types first, then by margin ascending\nresults.sort((a, b) => {\n  if (a.belowThreshold && !b.belowThreshold) return -1;\n  if (!a.belowThreshold && b.belowThreshold) return 1;\n  return a.marginPct - b.marginPct;\n});\n\nconst belowThresholdTypes = results.filter(r => r.belowThreshold);\nconst hasAlert = belowThresholdTypes.length > 0;\n\nconst window = $('Calculate 30-Day Window').item.json;\n\nreturn [{\n  json: {\n    hasAlert,\n    belowThresholdTypes,\n    allResults: results,\n    totalInvoicesAnalyzed: invoices.length,\n    period: `${window.startDate} – ${window.endDate}`,\n    generatedAt: window.generatedAt,\n    thresholdPct: MARGIN_THRESHOLD\n  }\n}];"
+      },
+      "id": "calc-margins",
+      "name": "Calculate Margins by Service Type",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "margin-alert-check",
+              "leftValue": "={{ $json.hasAlert }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-alert",
+      "name": "Any Margin Below 40%?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build a detailed issue description for the CEO Agent.\n// true branch — at least one service type is below the 40% threshold.\nconst data = $('Calculate Margins by Service Type').item.json;\n\nconst fmt$ = (cents) => `$${(cents / 100).toFixed(2)}`;\nconst fmtPct = (p) => `${p.toFixed(2)}%`;\n\n// ─── Alert summary table ──────────────────────────────────────────────────\nconst alertRows = data.belowThresholdTypes\n  .map(r =>\n    `| ${r.serviceType} | ${r.invoiceCount} | ${fmt$(r.avgRevenueCents)} | ${fmt$(r.costCents)} | ${fmtPct(r.marginPct)} | BELOW THRESHOLD |`\n  )\n  .join('\\n');\n\n// ─── All service types for full context ──────────────────────────────────\nconst allRows = data.allResults\n  .map(r =>\n    `| ${r.serviceType} | ${r.invoiceCount} | ${fmt$(r.avgRevenueCents)} | ${fmt$(r.costCents)} | ${fmtPct(r.marginPct)} | ${r.belowThreshold ? '⚠ BELOW' : '✓ OK'} |`\n  )\n  .join('\\n');\n\nconst alertTypeList = data.belowThresholdTypes\n  .map(r => `- **${r.serviceType}**: ${fmtPct(r.marginPct)} margin (avg revenue ${fmt$(r.avgRevenueCents)} vs ${fmt$(r.costCents)} benchmark cost, ${r.invoiceCount} invoice(s))`)\n  .join('\\n');\n\nconst title = `CRITICAL: Job Margin Alert — ${data.belowThresholdTypes.length} service type(s) below ${data.thresholdPct}% threshold`;\n\nconst description = `# Job Profitability Margin Alert\n\n**Severity:** CRITICAL  \n**Period:** ${data.period}  \n**Generated:** ${new Date(data.generatedAt).toLocaleString('en-US', { timeZone: 'America/New_York' })}  \n**Threshold:** ${data.thresholdPct}% minimum margin  \n**Total invoices analyzed:** ${data.totalInvoicesAnalyzed}\n\n---\n\n## Service Types Below ${data.thresholdPct}% Threshold\n\n${alertTypeList}\n\n---\n\n## Below-Threshold Detail\n\n| Service Type | # Invoices | Avg Revenue | Benchmark Cost | Margin % | Status |\n|-------------|------------|-------------|----------------|----------|--------|\n${alertRows}\n\n---\n\n## Full Profitability Breakdown (Last 30 Days)\n\n| Service Type | # Invoices | Avg Revenue | Benchmark Cost | Margin % | Status |\n|-------------|------------|-------------|----------------|----------|--------|\n${allRows}\n\n---\n\n## Recommended Actions\n\n1. Review pricing for flagged service types against current market rates.\n2. Audit parts sourcing costs — consider alternate suppliers for high-parts-cost jobs.\n3. Review technician time tracking to identify inefficiencies in labor.\n4. Check if discounts or write-offs are inflating the cost-to-revenue gap.\n5. Update cost benchmarks in Supabase \\`job_cost_benchmarks\\` table if costs have changed.\n\n---\n_Automated alert from Operations Agent — Murray's AI Command Center (MUR-10)_`;\n\nreturn [{\n  json: {\n    title,\n    description,\n    data\n  }\n}];"
+      },
+      "id": "build-alert-payload",
+      "name": "Build Alert Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 180]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.PAPERCLIP_API_URL }}/api/companies/{{ $env.PAPERCLIP_COMPANY_ID }}/issues",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.PAPERCLIP_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "title", "value": "={{ $json.title }}" },
+            { "name": "description", "value": "={{ $json.description }}" },
+            { "name": "status", "value": "todo" },
+            { "name": "priority", "value": "urgent" },
+            { "name": "assigneeAgentId", "value": "={{ $env.CEO_AGENT_ID }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "post-alert-to-paperclip",
+      "name": "Post Critical Alert to CEO Agent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1560, 180]
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = $input.first().json;\nconst data = $('Calculate Margins by Service Type').item.json;\nconst fmtPct = (p) => `${p.toFixed(2)}%`;\n\nconsole.log('=== MARGIN ALERT DELIVERED ===');\nconsole.log(`Issue ID: ${result.id} | Identifier: ${result.identifier}`);\nconsole.log(`Period: ${data.period}`);\nconsole.log(`Below-threshold types (${data.belowThresholdTypes.length}):`);\nfor (const t of data.belowThresholdTypes) {\n  console.log(`  - ${t.serviceType}: ${fmtPct(t.marginPct)} (${t.invoiceCount} invoices)`);\n}\n\nreturn [{\n  json: {\n    success: true,\n    issueId: result.id,\n    identifier: result.identifier,\n    belowThresholdCount: data.belowThresholdTypes.length,\n    period: data.period\n  }\n}];"
+      },
+      "id": "log-alert-sent",
+      "name": "Log Alert Sent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 180]
+    },
+    {
+      "parameters": {
+        "jsCode": "// false branch — all margins are healthy (>= 40%)\nconst data = $('Calculate Margins by Service Type').item.json;\nconst fmtPct = (p) => `${p.toFixed(2)}%`;\n\nconsole.log('=== MARGIN CHECK: All margins healthy ===');\nconsole.log(`Period: ${data.period}`);\nconsole.log(`Total invoices analyzed: ${data.totalInvoicesAnalyzed}`);\nfor (const r of data.allResults) {\n  console.log(`  ${r.serviceType}: ${fmtPct(r.marginPct)} (${r.invoiceCount} invoices)`);\n}\n\nreturn [{\n  json: {\n    success: true,\n    status: 'healthy',\n    message: 'All margins healthy — no service type is below the 40% threshold.',\n    period: data.period,\n    serviceTypes: data.allResults.map(r => ({\n      serviceType: r.serviceType,\n      marginPct: r.marginPct,\n      invoiceCount: r.invoiceCount\n    }))\n  }\n}];"
+      },
+      "id": "log-healthy",
+      "name": "Log All Margins Healthy",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 420]
+    }
+  ],
+  "connections": {
+    "Daily 9 AM ET": {
+      "main": [
+        [{ "node": "Calculate 30-Day Window", "type": "main", "index": 0 }]
+      ]
+    },
+    "Calculate 30-Day Window": {
+      "main": [
+        [{ "node": "Fetch Last 30 Days Invoices", "type": "main", "index": 0 }]
+      ]
+    },
+    "Fetch Last 30 Days Invoices": {
+      "main": [
+        [{ "node": "Calculate Margins by Service Type", "type": "main", "index": 0 }]
+      ]
+    },
+    "Calculate Margins by Service Type": {
+      "main": [
+        [{ "node": "Any Margin Below 40%?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Any Margin Below 40%?": {
+      "main": [
+        [{ "node": "Build Alert Payload", "type": "main", "index": 0 }],
+        [{ "node": "Log All Margins Healthy", "type": "main", "index": 0 }]
+      ]
+    },
+    "Build Alert Payload": {
+      "main": [
+        [{ "node": "Post Critical Alert to CEO Agent", "type": "main", "index": 0 }]
+      ]
+    },
+    "Post Critical Alert to CEO Agent": {
+      "main": [
+        [{ "node": "Log Alert Sent", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/New_York"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": ["financial", "alerts", "profitability", "automated"],
+  "_envVarsRequired": [
+    "SUPABASE_URL",
+    "SUPABASE_SERVICE_KEY",
+    "PAPERCLIP_API_URL",
+    "PAPERCLIP_API_KEY",
+    "PAPERCLIP_COMPANY_ID",
+    "CEO_AGENT_ID"
+  ],
+  "_setupNotes": "1. Import this JSON into n8n (Settings > Import). 2. Set env vars in n8n Settings > Environment Variables. 3. SUPABASE_SERVICE_KEY = service_role key from Supabase dashboard. 4. Cron fires at 14:00 UTC = 09:00 America/New_York (EST). For EDT (summer), update cron to '0 13 * * *'. 5. Cost benchmarks in the Code node mirror the seeded defaults in migration 20260312120000_add_job_cost_benchmarks.sql — keep them in sync if benchmarks are updated. 6. Activate the workflow after setting all env vars."
+}

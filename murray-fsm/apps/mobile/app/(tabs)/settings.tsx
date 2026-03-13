@@ -29,7 +29,7 @@ export default function SettingsScreen() {
         onPress: async () => {
           try {
             await signOut();
-          } catch (error) {
+          } catch {
             Alert.alert('Error', 'Failed to sign out');
           }
         },

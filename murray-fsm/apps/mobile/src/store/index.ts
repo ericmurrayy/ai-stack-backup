@@ -51,7 +51,7 @@ export const authState$ = observable({
 });
 
 // Generate sync configuration for a table
-const createSupabaseSync = <T extends { id: string }>(
+const createSupabaseSync = (
   tableName: string,
   options?: {
     fieldUpdatedAt?: string | false;
@@ -82,7 +82,7 @@ const createSupabaseSync = <T extends { id: string }>(
 // Customers store
 export const customers$ = observable<Record<string, Customer>>(
   synced({
-    ...createSupabaseSync<Customer>('customers'),
+    ...createSupabaseSync('customers'),
     initial: {},
   })
 );
@@ -90,7 +90,7 @@ export const customers$ = observable<Record<string, Customer>>(
 // Locations store
 export const locations$ = observable<Record<string, Location>>(
   synced({
-    ...createSupabaseSync<Location>('locations'),
+    ...createSupabaseSync('locations'),
     initial: {},
   })
 );
@@ -98,7 +98,7 @@ export const locations$ = observable<Record<string, Location>>(
 // Jobs store
 export const jobs$ = observable<Record<string, Job>>(
   synced({
-    ...createSupabaseSync<Job>('jobs'),
+    ...createSupabaseSync('jobs'),
     initial: {},
   })
 );
@@ -106,7 +106,7 @@ export const jobs$ = observable<Record<string, Job>>(
 // Job Events store
 export const jobEvents$ = observable<Record<string, JobEvent>>(
   synced({
-    ...createSupabaseSync<JobEvent>('job_events'),
+    ...createSupabaseSync('job_events'),
     initial: {},
   })
 );
@@ -114,7 +114,7 @@ export const jobEvents$ = observable<Record<string, JobEvent>>(
 // Job Photos store (metadata only - actual files handled separately)
 export const jobPhotos$ = observable<Record<string, JobPhoto>>(
   synced({
-    ...createSupabaseSync<JobPhoto>('job_photos'),
+    ...createSupabaseSync('job_photos'),
     initial: {},
   })
 );
@@ -122,7 +122,7 @@ export const jobPhotos$ = observable<Record<string, JobPhoto>>(
 // Job Signatures store (metadata only)
 export const jobSignatures$ = observable<Record<string, JobSignature>>(
   synced({
-    ...createSupabaseSync<JobSignature>('job_signatures'),
+    ...createSupabaseSync('job_signatures'),
     initial: {},
   })
 );
@@ -130,7 +130,7 @@ export const jobSignatures$ = observable<Record<string, JobSignature>>(
 // Line Items store
 export const lineItems$ = observable<Record<string, LineItem>>(
   synced({
-    ...createSupabaseSync<LineItem>('line_items'),
+    ...createSupabaseSync('line_items'),
     initial: {},
   })
 );
@@ -138,7 +138,7 @@ export const lineItems$ = observable<Record<string, LineItem>>(
 // Payments store
 export const payments$ = observable<Record<string, Payment>>(
   synced({
-    ...createSupabaseSync<Payment>('payments', { fieldDeleted: false }),
+    ...createSupabaseSync('payments', { fieldDeleted: false }),
     initial: {},
   })
 );
@@ -146,7 +146,7 @@ export const payments$ = observable<Record<string, Payment>>(
 // Technicians store
 export const technicians$ = observable<Record<string, Technician>>(
   synced({
-    ...createSupabaseSync<Technician>('technicians', { fieldDeleted: false }),
+    ...createSupabaseSync('technicians', { fieldDeleted: false }),
     initial: {},
   })
 );
@@ -154,7 +154,7 @@ export const technicians$ = observable<Record<string, Technician>>(
 // Inventory Items store
 export const inventoryItems$ = observable<Record<string, InventoryItem>>(
   synced({
-    ...createSupabaseSync<InventoryItem>('inventory_items', { fieldDeleted: false }),
+    ...createSupabaseSync('inventory_items', { fieldDeleted: false }),
     initial: {},
   })
 );
@@ -162,7 +162,7 @@ export const inventoryItems$ = observable<Record<string, InventoryItem>>(
 // Notifications store
 export const notifications$ = observable<Record<string, Notification>>(
   synced({
-    ...createSupabaseSync<Notification>('notifications', { fieldUpdatedAt: false, fieldDeleted: false }),
+    ...createSupabaseSync('notifications', { fieldUpdatedAt: false, fieldDeleted: false }),
     initial: {},
   })
 );
@@ -170,7 +170,7 @@ export const notifications$ = observable<Record<string, Notification>>(
 // Estimates store
 export const estimates$ = observable<Record<string, Estimate>>(
   synced({
-    ...createSupabaseSync<Estimate>('estimates', { fieldDeleted: false }),
+    ...createSupabaseSync('estimates', { fieldDeleted: false }),
     initial: {},
   })
 );
@@ -178,7 +178,7 @@ export const estimates$ = observable<Record<string, Estimate>>(
 // Action Queue store (read-only from mobile)
 export const actionQueue$ = observable<Record<string, ActionQueueItem>>(
   synced({
-    ...createSupabaseSync<ActionQueueItem>('action_queue'),
+    ...createSupabaseSync('action_queue'),
     initial: {},
   })
 );
@@ -186,26 +186,26 @@ export const actionQueue$ = observable<Record<string, ActionQueueItem>>(
 // Calendar Events store
 export const calendarEvents$ = observable<Record<string, CalendarEvent>>(
   synced({
-    ...createSupabaseSync<CalendarEvent>('calendar_events'),
+    ...createSupabaseSync('calendar_events'),
     initial: {},
   })
 );
 
 // Pending uploads queue (local only)
 export const pendingUploads$ = observable<{
-  photos: Array<{
+  photos: {
     id: string;
     jobId: string;
     localUri: string;
     kind: string;
     caption?: string;
-  }>;
-  signatures: Array<{
+  }[];
+  signatures: {
     id: string;
     jobId: string;
     localUri: string;
     signerName: string;
-  }>;
+  }[];
 }>(
   synced({
     initial: { photos: [], signatures: [] },

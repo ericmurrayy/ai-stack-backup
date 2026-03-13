@@ -5,7 +5,7 @@
 // Validates portal token (no session auth required).
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import Stripe from 'stripe';
 
 // ============================================================================
@@ -18,7 +18,7 @@ export async function POST(
 ) {
   try {
     const { token } = await params;
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     // ------------------------------------------------------------------
     // 1. Validate portal token
@@ -87,6 +87,13 @@ export async function POST(
       );
     }
 
+    if (portalToken.job_id && portalToken.job_id !== job_id) {
+      return NextResponse.json(
+        { error: 'Portal token is not valid for this job' },
+        { status: 403 },
+      );
+    }
+
     // ------------------------------------------------------------------
     // 3. Verify the job belongs to this customer
     // ------------------------------------------------------------------
@@ -94,6 +101,7 @@ export async function POST(
       .from('jobs')
       .select('id, owner_id, customer_name, email, phone_e164, issue_description')
       .eq('id', job_id)
+      .eq('owner_id', portalToken.owner_id)
       .eq('phone_e164', portalToken.customer_phone)
       .single();
 

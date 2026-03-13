@@ -4,7 +4,7 @@
 // Customer-facing endpoint: validates portal token (no session auth required)
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { dispatchWebhookEvent } from '@/lib/webhook-dispatch';
 
 // ============================================================================
@@ -17,7 +17,7 @@ export async function POST(
 ) {
   try {
     const { token, estimateId } = await params;
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     // ------------------------------------------------------------------
     // 1. Validate portal token
@@ -46,10 +46,17 @@ export async function POST(
     // 2. Verify the estimate belongs to a job for this customer
     // ------------------------------------------------------------------
     // Get jobs associated with this customer's phone number
-    const { data: customerJobs, error: jobsError } = await supabase
+    let jobsQuery = supabase
       .from('jobs')
       .select('id')
+      .eq('owner_id', portalToken.owner_id)
       .eq('phone_e164', portalToken.customer_phone);
+
+    if (portalToken.job_id) {
+      jobsQuery = jobsQuery.eq('id', portalToken.job_id);
+    }
+
+    const { data: customerJobs, error: jobsError } = await jobsQuery;
 
     if (jobsError || !customerJobs || customerJobs.length === 0) {
       return NextResponse.json(
@@ -65,6 +72,7 @@ export async function POST(
       .from('estimates')
       .select('id, job_id, estimate_number, status, total_cents, notes, valid_until, sent_at, created_at')
       .eq('id', estimateId)
+      .eq('owner_id', portalToken.owner_id)
       .in('job_id', customerJobIds)
       .single();
 
@@ -95,6 +103,7 @@ export async function POST(
         approved_at: now,
       })
       .eq('id', estimateId)
+      .eq('owner_id', portalToken.owner_id)
       .select()
       .single();
 

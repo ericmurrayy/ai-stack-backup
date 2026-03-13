@@ -95,7 +95,10 @@ export function NotificationBell() {
   }, [userId]);
 
   useEffect(() => {
-    fetchNotifications();
+    const timer = window.setTimeout(() => {
+      void fetchNotifications();
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [fetchNotifications]);
 
   // ---- Realtime subscription (filtered to user's notifications) ------------

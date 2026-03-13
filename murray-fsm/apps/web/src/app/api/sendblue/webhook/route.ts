@@ -3,12 +3,12 @@
 // POST /api/sendblue/webhook — receives incoming iMessages and status updates
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     // Sendblue sends different webhook types
     const { accountEmail, content, number, media_url, send_style,
@@ -24,7 +24,8 @@ export async function POST(req: NextRequest) {
       // Try to match to a customer
       const { data: customers } = await supabase
         .from('customers')
-        .select('id, owner_id')
+        .select('id, owner_id, phone')
+        .not('phone', 'is', null)
         .eq('deleted', false);
 
       let matchedCustomerId: string | null = null;

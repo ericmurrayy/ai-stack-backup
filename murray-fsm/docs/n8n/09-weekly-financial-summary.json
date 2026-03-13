@@ -1,0 +1,220 @@
+{
+  "name": "09 - Weekly Financial Summary Report",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * 1"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Every Monday 8 AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Calculate week date ranges in Eastern time\nconst now = new Date();\n\n// Most recent completed week: Mon-Sun\n// Since we run Monday morning, \"last week\" = 7 days ago Mon -> Sun\nconst dayOfWeek = now.getDay(); // 0=Sun, 1=Mon\nconst daysToLastMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;\n\n// This past Monday (start of current week)\nconst thisWeekStart = new Date(now);\nthisWeekStart.setDate(now.getDate() - daysToLastMonday);\nthisWeekStart.setHours(0, 0, 0, 0);\n\n// Last week = prior Mon-Sun\nconst lastWeekStart = new Date(thisWeekStart);\nlastWeekStart.setDate(thisWeekStart.getDate() - 7);\nconst lastWeekEnd = new Date(thisWeekStart);\n\n// Week before that (for WoW comparison)\nconst priorWeekStart = new Date(lastWeekStart);\npriorWeekStart.setDate(lastWeekStart.getDate() - 7);\nconst priorWeekEnd = new Date(lastWeekStart);\n\n// 30 days ago for overdue threshold\nconst thirtyDaysAgo = new Date(now);\nthirtyDaysAgo.setDate(now.getDate() - 30);\n\nconst fmt = (d) => d.toISOString().split('T')[0];\n\nreturn [{\n  json: {\n    lastWeekStart: fmt(lastWeekStart),\n    lastWeekEnd: fmt(lastWeekEnd),\n    priorWeekStart: fmt(priorWeekStart),\n    priorWeekEnd: fmt(priorWeekEnd),\n    thirtyDaysAgo: fmt(thirtyDaysAgo),\n    reportLabel: `${fmt(lastWeekStart)} – ${new Date(lastWeekEnd.getTime() - 86400000).toISOString().split('T')[0]}`,\n    generatedAt: now.toISOString()\n  }\n}];"
+      },
+      "id": "calc-dates",
+      "name": "Calculate Date Ranges",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/invoices",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Prefer", "value": "return=representation" }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "select", "value": "id,invoice_number,customer_name,total_cents,amount_paid_cents,balance_due_cents,status,issue_date,job_id,job:jobs!job_id(service_type,source)" },
+            { "name": "issue_date", "value": "=gte.{{ $json.lastWeekStart }}" },
+            { "name": "issue_date2", "value": "=lt.{{ $json.lastWeekEnd }}" },
+            { "name": "status", "value": "=not.in.(void,written_off)" },
+            { "name": "deleted", "value": "=eq.false" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-week-invoices",
+      "name": "Fetch Last Week Invoices",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [680, 200]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/invoices",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}" }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "select", "value": "id,total_cents,amount_paid_cents,status,issue_date,job_id,job:jobs!job_id(service_type,source)" },
+            { "name": "issue_date", "value": "=gte.{{ $('Calculate Date Ranges').item.json.priorWeekStart }}" },
+            { "name": "issue_date2", "value": "=lt.{{ $('Calculate Date Ranges').item.json.priorWeekEnd }}" },
+            { "name": "status", "value": "=not.in.(void,written_off)" },
+            { "name": "deleted", "value": "=eq.false" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-prior-week-invoices",
+      "name": "Fetch Prior Week Invoices",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [680, 400]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/invoices",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_SERVICE_KEY }}" },
+            { "name": "Range", "value": "0-49" }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "select", "value": "invoice_number,customer_name,customer_phone,total_cents,balance_due_cents,due_date,status" },
+            { "name": "status", "value": "=not.in.(paid,void,written_off)" },
+            { "name": "deleted", "value": "=eq.false" },
+            { "name": "balance_due_cents", "value": "=gt.0" },
+            { "name": "due_date", "value": "=lt.{{ $('Calculate Date Ranges').item.json.thirtyDaysAgo }}" },
+            { "name": "order", "value": "due_date.asc" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-overdue",
+      "name": "Fetch Overdue Invoices (>30d)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [680, 600]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Aggregate current week + prior week data for the report\nconst dates = $('Calculate Date Ranges').item.json;\nconst currentWeek = $('Fetch Last Week Invoices').all().map(i => i.json);\nconst priorWeek = $('Fetch Prior Week Invoices').all().map(i => i.json);\nconst overdue = $('Fetch Overdue Invoices (>30d)').all().map(i => i.json);\n\nconst fmt$ = (cents) => `$${(cents / 100).toFixed(2)}`;\nconst pct = (a, b) => b === 0 ? 'N/A' : `${((a - b) / b * 100).toFixed(1)}%`;\nconst arrow = (a, b) => a >= b ? '▲' : '▼';\n\n// --- Revenue by service type (current week) ---\nconst serviceMap = {};\nfor (const inv of currentWeek) {\n  const svc = inv.job?.service_type || 'Unknown';\n  if (!serviceMap[svc]) serviceMap[svc] = { invoiced: 0, paid: 0, count: 0 };\n  serviceMap[svc].invoiced += inv.total_cents || 0;\n  serviceMap[svc].paid += inv.amount_paid_cents || 0;\n  serviceMap[svc].count += 1;\n}\n\n// --- Lead source counts (current week) ---\nconst sourceMap = {};\nfor (const inv of currentWeek) {\n  const src = inv.job?.source || 'Unknown';\n  if (!sourceMap[src]) sourceMap[src] = 0;\n  sourceMap[src] += 1;\n}\n\n// --- Totals ---\nconst totalInvoiced = currentWeek.reduce((s, i) => s + (i.total_cents || 0), 0);\nconst totalPaid = currentWeek.reduce((s, i) => s + (i.amount_paid_cents || 0), 0);\nconst totalOutstanding = totalInvoiced - totalPaid;\nconst invoiceCount = currentWeek.length;\n\nconst priorInvoiced = priorWeek.reduce((s, i) => s + (i.total_cents || 0), 0);\nconst priorPaid = priorWeek.reduce((s, i) => s + (i.amount_paid_cents || 0), 0);\nconst priorCount = priorWeek.length;\n\n// --- Overdue summary ---\nconst overdueTotal = overdue.reduce((s, i) => s + (i.balance_due_cents || 0), 0);\n\n// Build service type rows\nconst serviceRows = Object.entries(serviceMap)\n  .sort((a, b) => b[1].invoiced - a[1].invoiced)\n  .map(([svc, d]) => `| ${svc} | ${d.count} | ${fmt$(d.invoiced)} | ${fmt$(d.paid)} |`)\n  .join('\\n');\n\n// Build lead source rows\nconst sourceRows = Object.entries(sourceMap)\n  .sort((a, b) => b[1] - a[1])\n  .map(([src, cnt]) => `| ${src} | ${cnt} |`)\n  .join('\\n');\n\n// Build overdue rows (top 10)\nconst overdueRows = overdue.slice(0, 10)\n  .map(i => {\n    const daysAgo = Math.floor((Date.now() - new Date(i.due_date).getTime()) / 86400000);\n    return `| #${i.invoice_number} | ${i.customer_name} | ${fmt$(i.balance_due_cents)} | ${i.due_date} | ${daysAgo}d |`;\n  })\n  .join('\\n');\n\nconst wowRevPct = pct(totalInvoiced, priorInvoiced);\nconst wowRevArrow = arrow(totalInvoiced, priorInvoiced);\nconst wowJobPct = pct(invoiceCount, priorCount);\nconst wowJobArrow = arrow(invoiceCount, priorCount);\n\nconst report = `# Weekly Financial Report\n**Period:** ${dates.reportLabel}\n**Generated:** ${new Date(dates.generatedAt).toLocaleString('en-US', {timeZone: 'America/New_York'})}\n\n---\n\n## Executive Summary\n\n| Metric | This Week | Prior Week | Change |\n|--------|-----------|------------|--------|\n| Total Invoiced | ${fmt$(totalInvoiced)} | ${fmt$(priorInvoiced)} | ${wowRevArrow} ${wowRevPct} |\n| Total Collected | ${fmt$(totalPaid)} | ${fmt$(priorPaid)} | ${arrow(totalPaid, priorPaid)} ${pct(totalPaid, priorPaid)} |\n| # Invoices | ${invoiceCount} | ${priorCount} | ${wowJobArrow} ${wowJobPct} |\n| Outstanding (this week) | ${fmt$(totalOutstanding)} | — | — |\n| Avg Invoice Value | ${invoiceCount > 0 ? fmt$(Math.round(totalInvoiced / invoiceCount)) : '$0'} | ${priorCount > 0 ? fmt$(Math.round(priorInvoiced / priorCount)) : '$0'} | — |\n\n---\n\n## Revenue by Service Type\n\n| Service Type | # Jobs | Invoiced | Collected |\n|-------------|--------|----------|----------|\n${serviceRows || '| No data | — | — | — |'}\n\n---\n\n## Leads by Source (This Week)\n\n| Channel | # Leads |\n|---------|---------|\n${sourceRows || '| No data | — |'}\n\n---\n\n## Outstanding Invoices >30 Days\n\n**Total overdue balance: ${fmt$(overdueTotal)} across ${overdue.length} invoice(s)**\n\n| Invoice # | Customer | Balance | Due Date | Days Overdue |\n|-----------|----------|---------|----------|--------------|\n${overdueRows || '| — | No overdue invoices | — | — | — |'}\n${overdue.length > 10 ? `\\n_...and ${overdue.length - 10} more overdue invoices not shown._` : ''}\n\n---\n_Automated report from Operations Agent — Murray's AI Command Center_`;\n\nreturn [{\n  json: {\n    report,\n    summary: {\n      totalInvoiced,\n      totalPaid,\n      overdueTotal,\n      invoiceCount,\n      wowRevPct,\n      wowRevArrow\n    },\n    dates\n  }\n}];"
+      },
+      "id": "build-report",
+      "name": "Aggregate & Build Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.PAPERCLIP_API_URL }}/api/companies/{{ $env.PAPERCLIP_COMPANY_ID }}/issues",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.PAPERCLIP_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "title", "value": "=Weekly Financial Report — {{ $json.dates.reportLabel }}" },
+            { "name": "description", "value": "={{ $json.report }}" },
+            { "name": "status", "value": "todo" },
+            { "name": "priority", "value": "medium" },
+            { "name": "assigneeAgentId", "value": "={{ $env.CEO_AGENT_ID }}" },
+            { "name": "goalId", "value": "={{ $env.FINANCIAL_GOAL_ID }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "post-to-paperclip",
+      "name": "Deliver Report to CEO Agent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = $input.first().json;\nconst summary = $('Aggregate & Build Report').item.json.summary;\nconst fmt$ = (cents) => `$${(cents / 100).toFixed(2)}`;\n\nconsole.log('Weekly financial report delivered to CEO Agent');\nconsole.log(`Issue ID: ${result.id} | Identifier: ${result.identifier}`);\nconsole.log(`Revenue: ${fmt$(summary.totalInvoiced)} (${summary.wowRevArrow} ${summary.wowRevPct} WoW)`);\nconsole.log(`Overdue: ${fmt$(summary.overdueTotal)}`);\n\nreturn [{ json: { success: true, issueId: result.id, identifier: result.identifier } }];"
+      },
+      "id": "log-success",
+      "name": "Log Completion",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 400]
+    }
+  ],
+  "connections": {
+    "Every Monday 8 AM": {
+      "main": [[{ "node": "Calculate Date Ranges", "type": "main", "index": 0 }]]
+    },
+    "Calculate Date Ranges": {
+      "main": [
+        [
+          { "node": "Fetch Last Week Invoices", "type": "main", "index": 0 },
+          { "node": "Fetch Prior Week Invoices", "type": "main", "index": 0 },
+          { "node": "Fetch Overdue Invoices (>30d)", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Fetch Last Week Invoices": {
+      "main": [[{ "node": "Aggregate & Build Report", "type": "main", "index": 0 }]]
+    },
+    "Fetch Prior Week Invoices": {
+      "main": [[{ "node": "Aggregate & Build Report", "type": "main", "index": 0 }]]
+    },
+    "Fetch Overdue Invoices (>30d)": {
+      "main": [[{ "node": "Aggregate & Build Report", "type": "main", "index": 0 }]]
+    },
+    "Aggregate & Build Report": {
+      "main": [[{ "node": "Deliver Report to CEO Agent", "type": "main", "index": 0 }]]
+    },
+    "Deliver Report to CEO Agent": {
+      "main": [[{ "node": "Log Completion", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/New_York"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": ["financial", "reporting", "automated"],
+  "_envVarsRequired": [
+    "SUPABASE_URL",
+    "SUPABASE_SERVICE_KEY",
+    "PAPERCLIP_API_URL",
+    "PAPERCLIP_API_KEY",
+    "PAPERCLIP_COMPANY_ID",
+    "CEO_AGENT_ID",
+    "FINANCIAL_GOAL_ID"
+  ],
+  "_setupNotes": "1. Import this JSON into n8n (Settings > Import). 2. Set env vars in n8n Settings > Environment Variables. 3. SUPABASE_SERVICE_KEY = service_role key from Supabase dashboard. 4. CEO_AGENT_ID = bd3f221f-ea13-4504-a64e-8af215728b7c. 5. PAPERCLIP_COMPANY_ID = 526f74c3-158b-4ee0-8154-8f06b7d4381a. 6. FINANCIAL_GOAL_ID = 7bc73195-8d97-40d7-9b04-a6de553fcf3f. 7. Activate the workflow. It will run every Monday at 8 AM ET."
+}

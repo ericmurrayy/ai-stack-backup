@@ -3,6 +3,7 @@
 // Embeddable booking page for customer self-scheduling
 
 import { createClient } from '@/lib/supabase/server';
+import Image from 'next/image';
 import { Card } from '@/components/ui/Card';
 import { serviceCategoryConfig } from '@/lib/utils';
 import {
@@ -162,7 +163,14 @@ export default async function BookingPage({
         <div className="max-w-2xl mx-auto px-6 py-4">
           <div className="flex items-center gap-4">
             {business.logo_url ? (
-              <img src={business.logo_url} alt={business.name} className="h-12" />
+              <Image
+                src={business.logo_url}
+                alt={business.name}
+                width={192}
+                height={48}
+                className="h-12 w-auto"
+                unoptimized
+              />
             ) : (
               <div
                 className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-xl"

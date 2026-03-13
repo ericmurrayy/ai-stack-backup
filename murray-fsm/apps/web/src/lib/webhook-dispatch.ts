@@ -3,7 +3,7 @@
 // Fire-and-forget webhook dispatch utility.
 // Call after successful API operations to notify external integrations.
 
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import {
   createWebhookDispatcher,
   type WebhookEvent,
@@ -42,7 +42,7 @@ async function _dispatch(
   event: WebhookEvent,
   payload: Record<string, unknown>
 ): Promise<void> {
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   // 1. Fetch active webhook endpoints for this owner that subscribe to the event
   const { data: endpoints, error: fetchError } = await supabase

@@ -3,7 +3,7 @@
 // Batch sync endpoint for offline-first mobile app
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { authenticateAndRateLimit } from '@/lib/api-middleware';
 import { applyRateLimitHeaders } from '@/lib/rate-limiter';
 import { hasScope } from '@murray-fsm/services';
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
     const body = await request.json();
 
     // Validate request body
@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
         .select(`
           id, title, status, service_type, scheduled_start, scheduled_end,
           total_cents, paid_cents, internal_notes, customer_notes,
-          customer_id, location_id, assigned_to, priority,
+          customer_id, location_id, assigned_technician_id, assigned_to:assigned_technician_id, priority,
           estimated_duration_minutes, created_at, updated_at, deleted
         `)
         .eq('owner_id', auth.ownerId)
@@ -202,7 +202,7 @@ export async function POST(request: NextRequest) {
 }
 
 async function processChanges(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: ReturnType<typeof createAdminClient>,
   ownerId: string,
   changes: SyncRequest['changes']
 ): Promise<void> {
@@ -212,7 +212,7 @@ async function processChanges(
   const JOB_ALLOWED_FIELDS = [
     'title', 'status', 'service_type', 'scheduled_start', 'scheduled_end',
     'internal_notes', 'customer_notes', 'priority', 'estimated_duration_minutes',
-    'actual_duration_minutes',
+    'actual_duration_minutes', 'assigned_technician_id',
   ];
   const TIME_ENTRY_ALLOWED_FIELDS = [
     'job_id', 'team_member_id', 'clock_in', 'clock_out', 'break_minutes', 'notes',
@@ -233,7 +233,11 @@ async function processChanges(
   if (changes.jobs) {
     for (const change of changes.jobs) {
       if (change.action === 'update' && change.data) {
-        const safe = pick(change.data, JOB_ALLOWED_FIELDS);
+        const normalized = { ...change.data } as Record<string, unknown>;
+        if (normalized.assigned_technician_id === undefined && normalized.assigned_to !== undefined) {
+          normalized.assigned_technician_id = normalized.assigned_to;
+        }
+        const safe = pick(normalized, JOB_ALLOWED_FIELDS);
         await supabase
           .from('jobs')
           .update({ ...safe, updated_at: new Date().toISOString() })

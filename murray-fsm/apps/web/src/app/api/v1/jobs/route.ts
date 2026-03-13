@@ -3,7 +3,7 @@
 // External API for job management
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { logApiUsage } from '@/lib/api-auth';
 import { authenticateAndRateLimit } from '@/lib/api-middleware';
 import { applyRateLimitHeaders } from '@/lib/rate-limiter';
@@ -16,6 +16,7 @@ import { dispatchWebhookEvent } from '@/lib/webhook-dispatch';
 
 const listJobsQuerySchema = z.object({
   status: z.enum(JOB_STATUSES).optional(),
+  assigned_technician_id: uuidString.optional(),
   assigned_to: uuidString.optional(),
   customer_id: uuidString.optional(),
   from_date: isoDateString.optional(),
@@ -32,6 +33,7 @@ const createJobBodySchema = z.object({
   scheduled_end: isoDateString.optional(),
   service_type: z.string().max(200).optional(),
   status: z.enum(JOB_STATUSES).optional(),
+  assigned_technician_id: uuidString.optional(),
   assigned_to: uuidString.optional(),
   notes: z.string().max(5000).optional(),
   priority: z.number().int().min(0).max(10).optional(),
@@ -56,14 +58,24 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
     const { searchParams } = new URL(request.url);
 
     // Validate query parameters
     const queryResult = validateQuery(listJobsQuerySchema, searchParams);
     if (!queryResult.success) return queryResult.response;
 
-    const { status, assigned_to: assignedTo, customer_id: customerId, from_date: fromDate, to_date: toDate, limit, offset } = queryResult.data;
+    const {
+      status,
+      assigned_technician_id: assignedTechnicianId,
+      assigned_to: assignedToLegacy,
+      customer_id: customerId,
+      from_date: fromDate,
+      to_date: toDate,
+      limit,
+      offset,
+    } = queryResult.data;
+    const assignedTo = assignedTechnicianId ?? assignedToLegacy;
 
     // Build query
     let query = supabase
@@ -140,7 +152,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
     const body = await request.json();
 
     // Validate request body
@@ -161,7 +173,7 @@ export async function POST(request: NextRequest) {
         scheduled_end: validated.scheduled_end,
         service_type: validated.service_type || 'general',
         status: validated.status || 'scheduled',
-        assigned_to: validated.assigned_to,
+        assigned_technician_id: validated.assigned_technician_id ?? validated.assigned_to,
         internal_notes: validated.notes,
         priority: validated.priority || 0,
         estimated_duration_minutes: validated.estimated_duration_minutes || 120,

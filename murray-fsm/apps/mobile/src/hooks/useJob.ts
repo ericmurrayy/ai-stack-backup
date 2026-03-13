@@ -13,7 +13,7 @@ import {
   payments$,
   appState$,
 } from '../store';
-import type { Job, JobWithRelations, LineItem } from '../types';
+import type { Job, LineItem } from '../types';
 
 export const useJob = (jobId: string) => {
   const job = useSelector(() => jobs$[jobId]?.get());

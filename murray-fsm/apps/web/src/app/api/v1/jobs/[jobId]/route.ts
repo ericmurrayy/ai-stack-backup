@@ -2,7 +2,7 @@
 // =================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { authenticateAndRateLimit } from '@/lib/api-middleware';
 import { applyRateLimitHeaders } from '@/lib/rate-limiter';
 import { hasScope } from '@murray-fsm/services';
@@ -18,6 +18,7 @@ const updateJobBodySchema = z.object({
   service_type: z.string().max(200).optional(),
   scheduled_start: isoDateString.optional(),
   scheduled_end: isoDateString.optional(),
+  assigned_technician_id: uuidString.optional(),
   assigned_to: uuidString.optional(),
   internal_notes: z.string().max(5000).optional(),
   priority: z.number().int().min(0).max(10).optional(),
@@ -51,7 +52,7 @@ export async function GET(
   if (!jobIdResult.success) return jobIdResult.response;
 
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     const { data: job, error } = await supabase
       .from('jobs')
@@ -118,7 +119,7 @@ export async function PATCH(
   if (!patchJobIdResult.success) return patchJobIdResult.response;
 
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
     const body = await request.json();
 
     // Validate update fields against allowed list with proper types
@@ -126,13 +127,18 @@ export async function PATCH(
     if (!bodyResult.success) return bodyResult.response;
 
     const validated = bodyResult.data;
+    const normalized: Record<string, unknown> = { ...validated };
+    if (normalized.assigned_technician_id === undefined && normalized.assigned_to !== undefined) {
+      normalized.assigned_technician_id = normalized.assigned_to;
+    }
+    delete normalized.assigned_to;
 
     // Build update object (only include fields that were provided)
     const updates: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
     };
 
-    for (const [field, value] of Object.entries(validated)) {
+    for (const [field, value] of Object.entries(normalized)) {
       if (value !== undefined) {
         updates[field] = value;
       }
@@ -207,7 +213,7 @@ export async function DELETE(
   if (!deleteJobIdResult.success) return deleteJobIdResult.response;
 
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
 
     const { error } = await supabase
       .from('jobs')

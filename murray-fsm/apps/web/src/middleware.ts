@@ -41,7 +41,7 @@ export async function middleware(request: NextRequest) {
   // Protect dashboard routes (deny-by-default)
   // Route groups like (dashboard) are NOT part of the URL path,
   // so we protect everything except known public paths.
-  const publicPrefixes = ['/auth', '/book', '/portal', '/api/v1', '/api/webhooks/sms'];
+  const publicPrefixes = ['/auth', '/book', '/portal', '/api/v1', '/api/webhooks/sms', '/api/sendblue/webhook'];
   const isPublic = publicPrefixes.some(p => request.nextUrl.pathname.startsWith(p))
     || request.nextUrl.pathname === '/';
 
@@ -66,7 +66,8 @@ export async function middleware(request: NextRequest) {
   // CSRF protection for internal API mutation endpoints
   const isInternalApi = request.nextUrl.pathname.startsWith('/api/')
     && !request.nextUrl.pathname.startsWith('/api/v1')
-    && !request.nextUrl.pathname.startsWith('/api/webhooks/sms');
+    && !request.nextUrl.pathname.startsWith('/api/webhooks/sms')
+    && !request.nextUrl.pathname.startsWith('/api/sendblue/webhook');
   if (isInternalApi && !validateCsrf(request)) {
     return csrfErrorResponse();
   }

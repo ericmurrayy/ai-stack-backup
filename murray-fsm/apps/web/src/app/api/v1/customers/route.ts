@@ -2,7 +2,7 @@
 // ======================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { authenticateAndRateLimit } from '@/lib/api-middleware';
 import { applyRateLimitHeaders } from '@/lib/rate-limiter';
 import { hasScope } from '@murray-fsm/services';
@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
     const { searchParams } = new URL(request.url);
 
     // Validate query parameters
@@ -129,7 +129,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const supabase = await createClient();
+    const supabase = createAdminClient();
     const body = await request.json();
 
     // Validate request body
